@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import TYPE_CHECKING
-from unittest.mock import ANY
 
 import pytest
 from homeassistant.components.button import DOMAIN as BUTTON_DOMAIN
@@ -24,6 +23,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -31,6 +31,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
+from custom_components.estia.card import schedule_device
 from custom_components.estia.const import (
     DOMAIN,
     INITIAL_AWAY_SETPOINT,
@@ -356,20 +357,36 @@ async def test_unload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     assert state.state == "unavailable"
 
 
-async def test_sidebar_panel_follows_entry(
+def panel_titles(frontend: Frontend) -> list[str]:
+    return [call.kwargs["sidebar_title"] for call in frontend.register_panel.await_args_list]
+
+
+async def test_sidebar_panel_follows_names(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     thermostat: FakeThermostat,
     no_frontend: Frontend,
 ) -> None:
-    no_frontend.register_panel.assert_awaited_once_with(hass, entry.entry_id, "Heating", ANY)
+    assert panel_titles(no_frontend) == ["Heating"]
 
-    # Options writes (every decision) do not reload or re-register.
+    # Options writes (every decision) do not touch the panel.
     await by_hand(hass, thermostat, 23.0)
-    assert no_frontend.register_panel.await_count == 1
+    assert panel_titles(no_frontend) == ["Heating"]
 
-    hass.config_entries.async_update_entry(entry, title="Riscaldamento")
+    # Renaming the device, as users do from its page, retitles the panel.
+    registry = dr.async_get(hass)
+    device = schedule_device(hass, entry.entry_id)
+    assert device is not None
+    registry.async_update_device(device.id, name_by_user="Estia")
     await hass.async_block_till_done()
-    no_frontend.remove_panel.assert_called_once_with(hass, entry.entry_id)
-    no_frontend.register_panel.assert_awaited_with(hass, entry.entry_id, "Riscaldamento", ANY)
-    assert mode(hass, entry) == Mode.MANUAL  # the hold survived the reload
+    assert panel_titles(no_frontend) == ["Heating", "Estia"]
+    no_frontend.remove_panel.assert_called_once()
+
+    # The device name wins over the entry title; clearing it falls back.
+    hass.config_entries.async_update_entry(entry, title="Living room")
+    await hass.async_block_till_done()
+    assert panel_titles(no_frontend) == ["Heating", "Estia"]
+    registry.async_update_device(device.id, name_by_user=None)
+    await hass.async_block_till_done()
+    assert panel_titles(no_frontend) == ["Heating", "Estia", "Living room"]
+    assert mode(hass, entry) == Mode.MANUAL  # no reload: the hold is untouched

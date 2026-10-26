@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.1.2 — 2026-10-27
+
+### Changed
+
+- **The panel is a full heating page**: Home Assistant's thermostat card (to
+  set the temperature by hand), the schedule card, and the temperature
+  history over 24 hours, 7 days or 30 days, side by side on wide screens.
+- **The card's controls are Home Assistant's own entities card**: native
+  switches and number boxes instead of the small custom ones, *All off*
+  asks for confirmation, and the preheat radius and travellers are hidden
+  while preheat is off.
+- **A slot's setpoint can be set directly**: type it, drag the slider, or
+  scroll the mouse wheel over it, besides − / +.
+- **Paused and Off explain themselves**: the card says what the schedule is
+  (not) doing and offers *Resume schedule* / *Turn back on*.
+- **The sidebar item is titled after the device** as you named it, falling
+  back to the entry's title; renaming either retitles it at once, without
+  reloading the schedule.
+- Bigger timeline, handles, buttons and steppers; easier to use on a phone.
+- The panel loads Home Assistant's card helpers itself, so the native cards
+  appear even when the browser opens the panel directly.
+- No more deprecated `async_get_device` calls (warned about by HA 2026.9).
+- The bundle URL carries a hash of its content, so browsers fetch every new
+  build without a version bump.
+
 ## 0.1.1 — 2026-10-27
 
 ### Added

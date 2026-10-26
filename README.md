@@ -18,7 +18,9 @@ of the hearth.
 - **Manual hold**: a setpoint changed by hand (the thermostat's own buttons, or
   the Home Assistant UI) is kept until the next slot starts. The house going
   empty overrides and clears it. *Return to schedule* drops it.
-- **Schedule switch**: off leaves the thermostat alone (mode *Paused*); back on
+- **Schedule switch**: off pauses the schedule (mode *Paused*): Estia leaves
+  the thermostat alone, so the temperature is whatever you set by hand, and
+  slots, away and preheat are ignored; back on
   switches the thermostat to heat if it was off, drops any hold and applies the
   schedule at once. *All off* stops the schedule and switches the thermostat
   off.
@@ -96,8 +98,10 @@ Two slots cannot start at the same time.
 
 ## The panel and the card
 
-Each schedule gets its own **sidebar item**, titled after the entry (rename
-the entry to rename it), showing the card full page. Nothing to configure.
+Each schedule gets its own **sidebar item**, titled after its device (rename
+the device or the entry to rename it): Home Assistant's thermostat card to
+set the temperature by hand, the schedule card, and the temperature history
+over 24 hours, 7 or 30 days. Nothing to configure.
 
 The card is bundled with the integration and loaded automatically; there is
 no separate resource to add. To put it on a dashboard as well:

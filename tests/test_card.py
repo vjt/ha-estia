@@ -8,7 +8,7 @@ import pytest
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, UrlManager
 from homeassistant.setup import async_setup_component
 
-from custom_components.estia.card import CARD_FILE, CARD_URL, async_register_card
+from custom_components.estia.card import CARD_FILE, CARD_URL, async_register_card, card_digest
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -28,9 +28,9 @@ async def test_card_is_served_and_registered(
     urls = UrlManager(lambda _action, _url: None, [])
     hass.data[DATA_EXTRA_MODULE_URL] = urls
 
-    await async_register_card(hass, "1.2.3")
+    await async_register_card(hass, card_digest())
 
-    assert urls.urls == frozenset({f"{CARD_URL}?v=1.2.3"})
+    assert urls.urls == frozenset({f"{CARD_URL}?v={card_digest()}"})
     client = await hass_client_no_auth()
     response = await client.get(CARD_URL)
     assert response.status == 200

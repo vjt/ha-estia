@@ -63,8 +63,8 @@ def no_frontend(hass: HomeAssistant) -> Generator[Frontend]:
     hass.config.components.update({"frontend", "http", "panel_custom"})
     with (
         patch("custom_components.estia.async_register_card") as card,
-        patch("custom_components.estia.async_register_schedule_panel") as panel,
-        patch("custom_components.estia.async_remove_schedule_panel") as remove,
+        patch("custom_components.estia.card.async_register_panel") as panel,
+        patch("custom_components.estia.card.async_remove_panel") as remove,
     ):
         yield Frontend(register_card=card, register_panel=panel, remove_panel=remove)
 

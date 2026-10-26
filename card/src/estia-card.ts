@@ -4,6 +4,7 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 
 import "./estia-panel";
 import { strings } from "./i18n";
+import { NativeCards } from "./native";
 import {
   DAY,
   companions,
@@ -21,6 +22,10 @@ import type { CardConfig, HassEntity, HomeAssistant, Mode, Schedule, Slot } from
 
 const LONG_PRESS_MS = 550;
 const SETPOINT_DEBOUNCE_MS = 900;
+// The slider covers the useful heating range; the number box and the
+// steppers reach the full setpoint range.
+const SLIDER_MIN = 10;
+const SLIDER_MAX = 26;
 const DOMAIN = "estia";
 
 const MODE_COLORS: Record<Mode, string> = {
@@ -82,6 +87,7 @@ export class EstiaCard extends LitElement {
   declare _error: string | null;
 
   private _clock: number | undefined;
+  private readonly _native = new NativeCards(() => this.requestUpdate());
   private _longPress: number | undefined;
   private _longPressed = false;
 
@@ -204,10 +210,16 @@ export class EstiaCard extends LitElement {
 
   // -- editor ----------------------------------------------------------------
 
-  private _step(schedule: Schedule, slot: Slot, direction: 1 | -1): void {
-    const current = this._pending?.id === slot.id ? this._pending.value : slot.setpoint;
-    const stepped = Math.round((current + direction * schedule.setpointStep) * 10) / 10;
-    const value = Math.min(schedule.setpointMax, Math.max(schedule.setpointMin, stepped));
+  /** The setpoint shown for a slot: the pending edit, if any. */
+  private _shown(slot: Slot): number {
+    return this._pending?.id === slot.id ? this._pending.value : slot.setpoint;
+  }
+
+  /** Show `value` at once, save it once the user stops changing it. */
+  private _setPending(schedule: Schedule, slot: Slot, raw: number): void {
+    if (!Number.isFinite(raw)) return;
+    const rounded = Math.round(raw * 10) / 10;
+    const value = Math.min(schedule.setpointMax, Math.max(schedule.setpointMin, rounded));
     if (this._pending !== null) window.clearTimeout(this._pending.timer);
     const timer = window.setTimeout(async () => {
       this._pending = null;
@@ -215,6 +227,16 @@ export class EstiaCard extends LitElement {
     }, SETPOINT_DEBOUNCE_MS);
     this._pending = { id: slot.id, value, timer };
   }
+
+  private _step(schedule: Schedule, slot: Slot, direction: 1 | -1): void {
+    this._setPending(schedule, slot, this._shown(slot) + direction * schedule.setpointStep);
+  }
+
+  private _onWheel(event: WheelEvent, schedule: Schedule, slot: Slot): void {
+    event.preventDefault();
+    this._step(schedule, slot, event.deltaY < 0 ? 1 : -1);
+  }
+
 
   private async _onStartInput(event: Event, schedule: Schedule, slot: Slot): Promise<void> {
     const value = (event.target as HTMLInputElement).value;
@@ -272,8 +294,8 @@ export class EstiaCard extends LitElement {
         ${this._renderHeader(schedule, climate, t)} ${this._renderTimeline(schedule, slots, t)}
         ${selected === undefined ? nothing : this._renderEditor(schedule, selected, t)}
         ${this._error === null ? nothing : html`<div class="message error">${this._error}</div>`}
-        ${this._renderControls(schedule, t)}
       </ha-card>
+      ${this._renderControls(schedule, t)}
     `;
   }
 
@@ -315,7 +337,35 @@ export class EstiaCard extends LitElement {
             </button>
           </div>`
         : nothing}
+      ${mode === "paused" ? this._notice(t.pausedInfo, t.resumeSchedule, () => this._resumeSchedule()) : nothing}
+      ${mode === "off" ? this._notice(t.offInfo, t.turnBackOn, () => this._turnBackOn(schedule)) : nothing}
     `;
+  }
+
+  private _notice(text: string, action: string, onClick: () => Promise<void>): TemplateResult {
+    return html`<div class="hold">
+      <span>${text}</span>
+      <button class="primary" @click=${onClick}>${action}</button>
+    </div>`;
+  }
+
+  /** Schedule switch on: heat if off, hold dropped, schedule applied. */
+  private async _resumeSchedule(): Promise<void> {
+    if (this.hass === undefined || this._config === undefined) return;
+    const schedule = companions(this.hass, this._config.entity).schedule;
+    if (schedule !== null) await this._call("switch", "turn_on", { entity_id: schedule });
+  }
+
+  /** After All off the schedule is off too: resuming it turns the heating
+   * back on. If only the thermostat was switched off, switch it to heat. */
+  private async _turnBackOn(schedule: Schedule): Promise<void> {
+    if (this.hass === undefined || this._config === undefined) return;
+    const switchId = companions(this.hass, this._config.entity).schedule;
+    if (switchId !== null && this.hass.states[switchId]?.state === "off") {
+      await this._call("switch", "turn_on", { entity_id: switchId });
+    } else {
+      await this._call("climate", "set_hvac_mode", { entity_id: schedule.climate, hvac_mode: "heat" });
+    }
   }
 
   private _renderTimeline(schedule: Schedule, slots: Slot[], t: ReturnType<typeof strings>): TemplateResult {
@@ -329,7 +379,7 @@ export class EstiaCard extends LitElement {
           ${segments(slots).map((segment) => {
             const slot = segment.slot;
             const active = slot.id === schedule.activeSlot;
-            const pending = this._pending?.id === slot.id ? this._pending.value : slot.setpoint;
+            const pending = this._shown(slot);
             return html`<div
               class="segment ${active ? "active" : ""} ${slot.id === this._selected ? "selected" : ""}"
               style="left:${percent(segment.from)};width:${percent(segment.to - segment.from)};background:${setpointColor(pending, low, high)}"
@@ -338,7 +388,7 @@ export class EstiaCard extends LitElement {
               @pointerleave=${() => window.clearTimeout(this._longPress)}
               @contextmenu=${(event: Event) => event.preventDefault()}
             >
-              ${segment.to - segment.from >= 120 ? html`<span>${pending.toFixed(1)}°</span>` : nothing}
+              ${segment.to - segment.from >= 100 ? html`<span>${pending.toFixed(1)}°</span>` : nothing}
             </div>`;
           })}
           ${slots.map(
@@ -367,7 +417,7 @@ export class EstiaCard extends LitElement {
   }
 
   private _renderEditor(schedule: Schedule, slot: Slot, t: ReturnType<typeof strings>): TemplateResult {
-    const value = this._pending?.id === slot.id ? this._pending.value : slot.setpoint;
+    const value = this._shown(slot);
     const armed = this._armedDelete === slot.id;
     return html`
       <div class="editor">
@@ -380,11 +430,34 @@ export class EstiaCard extends LitElement {
             @change=${(event: Event) => this._onStartInput(event, schedule, slot)}
           />
         </label>
-        <div class="stepper">
-          <span class="label">${t.setpoint}</span>
-          <button @click=${() => this._step(schedule, slot, -1)}>−</button>
-          <span class="big">${value.toFixed(1)}°</span>
-          <button @click=${() => this._step(schedule, slot, 1)}>+</button>
+        <div class="setpoint" @wheel=${(event: WheelEvent) => this._onWheel(event, schedule, slot)}>
+          <div class="stepper">
+            <span class="label">${t.setpoint}</span>
+            <button @click=${() => this._step(schedule, slot, -1)}>−</button>
+            <input
+              class="value"
+              type="number"
+              inputmode="decimal"
+              min=${schedule.setpointMin}
+              max=${schedule.setpointMax}
+              step=${schedule.setpointStep}
+              .value=${value.toFixed(1)}
+              @change=${(event: Event) =>
+                this._setPending(schedule, slot, Number((event.target as HTMLInputElement).value))}
+            />
+            <span class="big">°</span>
+            <button @click=${() => this._step(schedule, slot, 1)}>+</button>
+          </div>
+          <input
+            class="slider"
+            type="range"
+            min=${SLIDER_MIN}
+            max=${SLIDER_MAX}
+            step=${schedule.setpointStep}
+            .value=${String(value)}
+            @input=${(event: Event) =>
+              this._setPending(schedule, slot, Number((event.target as HTMLInputElement).value))}
+          />
         </div>
         <button class="delete ${armed ? "armed" : ""}" @click=${() => this._delete(schedule, slot)}>
           ${armed ? t.confirmDelete : t.deleteSlot}
@@ -393,148 +466,125 @@ export class EstiaCard extends LitElement {
     `;
   }
 
-  private _renderControls(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult {
-    if (this.hass === undefined || this._config === undefined) return html``;
-    const entities = companions(this.hass, this._config.entity);
-    return html`
-      <div class="controls">
-        <div class="row">
-          ${this._renderToggle(entities.schedule, t.schedule)}
-          ${entities.all_off === null
-            ? nothing
-            : html`<button
-                class="danger"
-                @click=${() => this._call("button", "press", { entity_id: entities.all_off })}
-              >
-                ${t.allOff}
-              </button>`}
-        </div>
-        <div class="row">${this._renderToggle(entities.preheat, t.preheat)}</div>
-        ${this._renderNumber(entities.away_setpoint, t.awaySetpoint)}
-        ${this._renderNumber(entities.away_delay, t.awayDelay)}
-        ${this._renderNumber(entities.preheat_radius, t.preheatRadius)}
-        ${schedule.proximity.map((pair) => this._renderTraveller(pair.distance, pair.direction, t))}
-      </div>
-    `;
-  }
-
-  private _renderToggle(entityId: string | null, label: string): TemplateResult | typeof nothing {
-    if (entityId === null || this.hass === undefined) return nothing;
-    const on = this.hass.states[entityId]?.state === "on";
-    return html`<label class="toggle">
-      <input
-        type="checkbox"
-        role="switch"
-        .checked=${on}
-        @change=${(event: Event) =>
-          this._call("switch", (event.target as HTMLInputElement).checked ? "turn_on" : "turn_off", {
-            entity_id: entityId,
-          })}
-      />
-      <span>${label}</span>
-    </label>`;
-  }
-
-  private _renderNumber(entityId: string | null, label: string): TemplateResult | typeof nothing {
-    if (entityId === null || this.hass === undefined) return nothing;
-    const entity = this.hass.states[entityId];
-    if (entity === undefined) return nothing;
-    const unit = stringAttr(entity, "unit_of_measurement") ?? "";
-    return html`<label class="number">
-      <span>${label}</span>
-      <span>
-        <input
-          type="number"
-          .value=${entity.state}
-          min=${numberAttr(entity, "min") ?? 0}
-          max=${numberAttr(entity, "max") ?? 100}
-          step=${numberAttr(entity, "step") ?? 1}
-          @change=${(event: Event) =>
-            this._call("number", "set_value", {
-              entity_id: entityId,
-              value: Number((event.target as HTMLInputElement).value),
-            })}
-        />
-        ${unit}
-      </span>
-    </label>`;
-  }
-
-  private _renderTraveller(distanceId: string, directionId: string, t: ReturnType<typeof strings>): TemplateResult {
-    const distance = this.hass?.states[distanceId];
-    const direction = this.hass?.states[directionId];
-    const name = stringAttr(distance, "friendly_name") ?? distanceId;
-    const unit = stringAttr(distance, "unit_of_measurement") ?? "";
-    const where = direction === undefined ? "" : (t.directions[direction.state] ?? direction.state);
-    return html`<div class="traveller">
-      <span>${name}</span>
-      <span class="secondary">${distance === undefined ? "—" : `${distance.state} ${unit}`} · ${where}</span>
-    </div>`;
+  /** The schedule's knobs as Home Assistant's own entities card: native
+   * switches, number boxes and the travellers' proximity sensors. */
+  private _renderControls(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
+    if (this.hass === undefined || this._config === undefined) return nothing;
+    const e = companions(this.hass, this._config.entity);
+    const row = (entity: string | null, name: string): Record<string, unknown>[] =>
+      entity === null ? [] : [{ entity, name }];
+    const rows: Record<string, unknown>[] = [
+      ...row(e.schedule, t.schedule),
+      ...(e.all_off === null
+        ? []
+        : [
+            {
+              type: "button",
+              name: t.allOff,
+              icon: "mdi:power",
+              action_name: t.allOffAction,
+              tap_action: {
+                action: "perform-action",
+                perform_action: "button.press",
+                target: { entity_id: e.all_off },
+                confirmation: { text: t.confirmAllOff },
+              },
+            },
+          ]),
+      { type: "section", label: t.awaySection },
+      ...row(e.away_setpoint, t.awaySetpoint),
+      ...row(e.away_delay, t.awayDelay),
+      ...row(e.preheat, t.preheat),
+      // Radius and travellers only matter while preheat is on.
+      ...[
+        ...row(e.preheat_radius, t.preheatRadius),
+        ...schedule.proximity.flatMap((pair) => [{ entity: pair.distance }, { entity: pair.direction }]),
+      ].map((preheatRow) =>
+        e.preheat === null
+          ? preheatRow
+          : {
+              type: "conditional",
+              conditions: [{ condition: "state", entity: e.preheat, state: "on" }],
+              row: preheatRow,
+            },
+      ),
+    ];
+    const card = this._native.get({ type: "entities", entities: rows }, this.hass);
+    return card === null ? nothing : html`<div class="controls">${card}</div>`;
   }
 
   static styles = css`
     :host {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
       --estia-radius: var(--ha-card-border-radius, 12px);
     }
     ha-card {
-      padding: 16px;
+      padding: 20px;
       color: var(--primary-text-color);
     }
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
+      gap: 12px;
     }
     .title {
-      font-size: 1.2em;
+      font-size: 1.4em;
       font-weight: 500;
     }
     .badge {
       color: var(--text-primary-color, #fff);
       border-radius: 999px;
-      padding: 2px 10px;
-      font-size: 0.85em;
+      padding: 6px 14px;
+      font-size: 1em;
+      font-weight: 500;
       white-space: nowrap;
     }
     .temps {
       display: flex;
-      gap: 24px;
-      margin: 8px 0;
+      gap: 32px;
+      margin: 12px 0 16px;
     }
-    .temps div,
-    .stepper {
+    .temps div {
       display: flex;
       align-items: baseline;
-      gap: 6px;
+      gap: 8px;
     }
-    .label,
-    .secondary {
+    .stepper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .label {
       color: var(--secondary-text-color);
-      font-size: 0.85em;
+      font-size: 0.95em;
     }
     .big {
-      font-size: 1.5em;
+      font-size: 2em;
       font-variant-numeric: tabular-nums;
     }
     .hold {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      padding: 8px 12px;
-      margin-bottom: 8px;
+      gap: 12px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
       border-radius: var(--estia-radius);
       background: var(--secondary-background-color);
+      font-size: 1.05em;
     }
     .timeline {
       position: relative;
-      padding: 18px 40px 4px 0;
+      padding: 24px 60px 4px 0;
     }
     .bar {
       position: relative;
-      height: 48px;
-      border-radius: 8px;
+      height: 72px;
+      border-radius: 10px;
       background: var(--secondary-background-color);
       touch-action: none;
       user-select: none;
@@ -547,37 +597,36 @@ export class EstiaCard extends LitElement {
       align-items: center;
       justify-content: center;
       color: #fff;
-      font-size: 0.85em;
+      font-size: 1.05em;
+      font-weight: 500;
       cursor: pointer;
       opacity: 0.8;
       box-sizing: border-box;
     }
     .segment.active {
       opacity: 1;
-      box-shadow: inset 0 0 0 2px var(--primary-text-color);
+      box-shadow: inset 0 0 0 3px var(--primary-text-color);
     }
     .segment.selected {
-      box-shadow: inset 0 0 0 3px var(--primary-color);
-    }
-    .segment:first-of-type {
-      border-radius: 8px 0 0 8px;
+      box-shadow: inset 0 0 0 4px var(--primary-color);
     }
     .handle {
       position: absolute;
-      top: -6px;
-      bottom: -6px;
-      width: 16px;
-      margin-left: -8px;
+      top: -10px;
+      bottom: -10px;
+      width: 28px;
+      margin-left: -14px;
       cursor: ew-resize;
       z-index: 2;
     }
     .handle::after {
       content: "";
       position: absolute;
-      left: 7px;
+      left: 12px;
       top: 0;
       bottom: 0;
-      width: 2px;
+      width: 4px;
+      border-radius: 2px;
       background: var(--card-background-color, #fff);
     }
     .handle.dragging::after {
@@ -588,17 +637,18 @@ export class EstiaCard extends LitElement {
       bottom: 100%;
       left: 50%;
       transform: translateX(-50%);
-      padding: 2px 6px;
-      border-radius: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
       background: var(--primary-color);
       color: var(--text-primary-color, #fff);
-      font-size: 0.8em;
+      font-size: 0.95em;
+      white-space: nowrap;
     }
     .now {
       position: absolute;
-      top: -4px;
-      bottom: -4px;
-      width: 2px;
+      top: -6px;
+      bottom: -6px;
+      width: 3px;
       margin-left: -1px;
       background: var(--error-color, #db4437);
       pointer-events: none;
@@ -606,10 +656,10 @@ export class EstiaCard extends LitElement {
     }
     .ticks {
       position: relative;
-      height: 16px;
-      margin-top: 6px;
+      height: 20px;
+      margin-top: 8px;
       color: var(--secondary-text-color);
-      font-size: 0.75em;
+      font-size: 0.9em;
     }
     .ticks span {
       position: absolute;
@@ -625,9 +675,10 @@ export class EstiaCard extends LitElement {
     }
     button {
       font: inherit;
+      min-height: 44px;
       border: none;
       border-radius: 999px;
-      padding: 6px 14px;
+      padding: 8px 18px;
       cursor: pointer;
       background: var(--secondary-background-color);
       color: var(--primary-text-color);
@@ -636,7 +687,6 @@ export class EstiaCard extends LitElement {
       background: var(--primary-color);
       color: var(--text-primary-color, #fff);
     }
-    button.danger,
     button.delete.armed {
       background: var(--error-color, #db4437);
       color: #fff;
@@ -644,72 +694,65 @@ export class EstiaCard extends LitElement {
     .add {
       position: absolute;
       right: 0;
-      top: 18px;
-      width: 32px;
-      height: 48px;
+      top: 24px;
+      width: 48px;
+      height: 72px;
       padding: 0;
-      font-size: 1.4em;
-      border-radius: 8px;
+      font-size: 1.8em;
+      border-radius: 10px;
     }
     .editor {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 12px 20px;
-      margin-top: 12px;
-      padding: 12px;
+      gap: 16px 28px;
+      margin-top: 16px;
+      padding: 16px;
       border-radius: var(--estia-radius);
       background: var(--secondary-background-color);
     }
     .editor label {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+    }
+    .setpoint {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1 1 280px;
+    }
+    .value {
+      width: 4.2em;
+      font-size: 1.6em;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .slider {
+      width: 100%;
+      min-height: 32px;
+      padding: 0;
+      border: none;
+      background: none;
+      accent-color: var(--primary-color);
     }
     .stepper button {
-      width: 36px;
-      height: 36px;
+      width: 48px;
+      height: 48px;
       padding: 0;
-      font-size: 1.2em;
+      font-size: 1.5em;
       background: var(--card-background-color);
     }
     input {
       font: inherit;
+      font-size: 1.15em;
+      min-height: 44px;
+      box-sizing: border-box;
       color: var(--primary-text-color);
       background: var(--card-background-color);
       border: 1px solid var(--divider-color);
-      border-radius: 6px;
-      padding: 4px 6px;
-    }
-    input[type="number"] {
-      width: 5em;
-    }
-    .controls {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid var(--divider-color);
-    }
-    .row,
-    .number,
-    .traveller {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-    .toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-    }
-    .toggle input {
-      accent-color: var(--primary-color);
-      width: 18px;
-      height: 18px;
+      border-radius: 8px;
+      padding: 6px 10px;
     }
     .message {
       padding: 8px 0;

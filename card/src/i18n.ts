@@ -9,6 +9,15 @@ interface Strings {
   returnToSchedule: string;
   schedule: string;
   allOff: string;
+  allOffAction: string;
+  pausedInfo: string;
+  resumeSchedule: string;
+  offInfo: string;
+  turnBackOn: string;
+  confirmAllOff: string;
+  awaySection: string;
+  history: string;
+  periods: { hours: number; label: string }[];
   preheat: string;
   awaySetpoint: string;
   awayDelay: string;
@@ -44,6 +53,20 @@ const EN: Strings = {
   returnToSchedule: "Return to schedule",
   schedule: "Schedule",
   allOff: "All off",
+  allOffAction: "Turn off",
+  pausedInfo:
+    "Schedule paused: Estia leaves the thermostat alone, the temperature is up to you. Slots, away and preheat are ignored until you resume it.",
+  resumeSchedule: "Resume schedule",
+  offInfo: "Heating off: the thermostat is off and Estia does not touch it.",
+  turnBackOn: "Turn back on",
+  confirmAllOff: "Stop the schedule and switch the heating off?",
+  awaySection: "Away and coming home",
+  history: "Temperature",
+  periods: [
+    { hours: 24, label: "24 hours" },
+    { hours: 168, label: "7 days" },
+    { hours: 720, label: "30 days" },
+  ],
   preheat: "Preheat on the way home",
   awaySetpoint: "Away setpoint",
   awayDelay: "Away delay",
@@ -79,6 +102,20 @@ const IT: Strings = {
   returnToSchedule: "Ritorna al programma",
   schedule: "Programma",
   allOff: "Spegni tutto",
+  allOffAction: "Spegni",
+  pausedInfo:
+    "Programma in pausa: Estia non tocca il termostato, la temperatura la decidi tu. Fasce, fuori casa e preriscaldo sono ignorati finché non lo riattivi.",
+  resumeSchedule: "Riattiva programma",
+  offInfo: "Riscaldamento spento: il termostato è spento ed Estia non lo tocca.",
+  turnBackOn: "Riaccendi",
+  confirmAllOff: "Spegnere riscaldamento e programma?",
+  awaySection: "Fuori casa e rientro",
+  history: "Temperatura",
+  periods: [
+    { hours: 24, label: "24 ore" },
+    { hours: 168, label: "7 giorni" },
+    { hours: 720, label: "30 giorni" },
+  ],
   preheat: "Preriscaldo al rientro",
   awaySetpoint: "Temperatura fuori casa",
   awayDelay: "Ritardo fuori casa",
