@@ -1,0 +1,36 @@
+{
+  "entity": {
+    "sensor": {
+      "mode": {
+        "default": "mdi:thermostat-auto",
+        "state": {
+          "home": "mdi:home-thermometer",
+          "away": "mdi:home-export-outline",
+          "preheat": "mdi:home-import-outline",
+          "manual": "mdi:hand-back-right",
+          "paused": "mdi:pause-circle-outline",
+          "off": "mdi:power"
+        }
+      }
+    },
+    "switch": {
+      "schedule": { "default": "mdi:calendar-clock" },
+      "preheat": { "default": "mdi:home-import-outline" }
+    },
+    "number": {
+      "away_setpoint": { "default": "mdi:home-export-outline" },
+      "away_delay": { "default": "mdi:timer-sand" },
+      "preheat_radius": { "default": "mdi:map-marker-distance" }
+    },
+    "button": {
+      "resume": { "default": "mdi:calendar-sync" },
+      "all_off": { "default": "mdi:power" }
+    }
+  },
+  "services": {
+    "set_slot": { "service": "mdi:clock-edit-outline" },
+    "add_slot": { "service": "mdi:plus" },
+    "remove_slot": { "service": "mdi:delete-outline" },
+    "resume": { "service": "mdi:calendar-sync" }
+  }
+}

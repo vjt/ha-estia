@@ -1,0 +1,115 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Heating schedule",
+        "description": "Pick the thermostat to drive and the sensors the schedule reads.",
+        "data": {
+          "name": "Name",
+          "climate": "Thermostat",
+          "presence": "Presence sensor",
+          "proximity": "Proximity distance sensors",
+          "slot_count": "Number of daily slots"
+        },
+        "data_description": {
+          "presence": "On while someone is home. When it has been off for the away delay, the away setpoint applies.",
+          "proximity": "Distance sensors from the Proximity integration, one per person (optional). Preheat applies the schedule when one of them is heading home within the preheat radius.",
+          "slot_count": "Slots to start with, spread evenly over the day. Add and remove them later from the card."
+        }
+      },
+      "reconfigure": {
+        "title": "Heating schedule sensors",
+        "data": {
+          "presence": "Presence sensor",
+          "proximity": "Proximity distance sensors"
+        },
+        "data_description": {
+          "presence": "On while someone is home. When it has been off for the away delay, the away setpoint applies.",
+          "proximity": "Distance sensors from the Proximity integration, one per person (optional)."
+        }
+      }
+    },
+    "error": {
+      "no_direction": "Each sensor must be a Proximity distance sensor with its direction of travel sensor."
+    },
+    "abort": {
+      "already_configured": "This thermostat already has a schedule.",
+      "reconfigure_successful": "The schedule now reads the new sensors."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "mode": {
+        "name": "Mode",
+        "state": {
+          "home": "Home",
+          "away": "Away",
+          "preheat": "Preheat",
+          "manual": "Manual",
+          "paused": "Paused",
+          "off": "Off"
+        }
+      }
+    },
+    "switch": {
+      "schedule": { "name": "Schedule" },
+      "preheat": { "name": "Preheat on the way home" }
+    },
+    "number": {
+      "away_setpoint": { "name": "Away setpoint" },
+      "away_delay": { "name": "Away delay" },
+      "preheat_radius": { "name": "Preheat radius" }
+    },
+    "button": {
+      "resume": { "name": "Return to schedule" },
+      "all_off": { "name": "All off" }
+    }
+  },
+  "exceptions": {
+    "duplicate_start": {
+      "message": "Another slot already starts at {start}."
+    },
+    "unknown_slot": {
+      "message": "No slot with id {slot_id}."
+    },
+    "entry_not_loaded": {
+      "message": "{entry_id} is not a loaded Estia schedule."
+    }
+  },
+  "services": {
+    "set_slot": {
+      "name": "Set slot",
+      "description": "Changes a slot's start time and setpoint.",
+      "fields": {
+        "config_entry_id": { "name": "Schedule", "description": "The Estia schedule to edit." },
+        "slot_id": { "name": "Slot", "description": "Id of the slot, from the mode sensor's slots attribute." },
+        "start": { "name": "Start", "description": "When the slot starts, every day." },
+        "setpoint": { "name": "Setpoint", "description": "Target temperature during the slot." }
+      }
+    },
+    "add_slot": {
+      "name": "Add slot",
+      "description": "Adds a daily slot.",
+      "fields": {
+        "config_entry_id": { "name": "Schedule", "description": "The Estia schedule to edit." },
+        "start": { "name": "Start", "description": "When the slot starts, every day." },
+        "setpoint": { "name": "Setpoint", "description": "Target temperature during the slot." }
+      }
+    },
+    "remove_slot": {
+      "name": "Remove slot",
+      "description": "Removes a daily slot.",
+      "fields": {
+        "config_entry_id": { "name": "Schedule", "description": "The Estia schedule to edit." },
+        "slot_id": { "name": "Slot", "description": "Id of the slot, from the mode sensor's slots attribute." }
+      }
+    },
+    "resume": {
+      "name": "Return to schedule",
+      "description": "Drops the manual hold and applies the schedule now.",
+      "fields": {
+        "config_entry_id": { "name": "Schedule", "description": "The Estia schedule." }
+      }
+    }
+  }
+}

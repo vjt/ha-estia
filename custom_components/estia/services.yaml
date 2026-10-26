@@ -1,0 +1,71 @@
+set_slot:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    slot_id:
+      required: true
+      example: "slot1"
+      selector:
+        text:
+    start:
+      required: true
+      example: "06:30"
+      selector:
+        time:
+    setpoint:
+      required: true
+      example: 20.5
+      selector:
+        number:
+          min: 5
+          max: 35
+          step: 0.1
+          unit_of_measurement: "°C"
+          mode: box
+
+add_slot:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    start:
+      required: true
+      example: "12:00"
+      selector:
+        time:
+    setpoint:
+      required: true
+      example: 20
+      selector:
+        number:
+          min: 5
+          max: 35
+          step: 0.1
+          unit_of_measurement: "°C"
+          mode: box
+
+remove_slot:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    slot_id:
+      required: true
+      example: "slot1"
+      selector:
+        text:
+
+resume:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
