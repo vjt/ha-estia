@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import TYPE_CHECKING
+from unittest.mock import ANY
 
 import pytest
 from homeassistant.components.button import DOMAIN as BUTTON_DOMAIN
@@ -23,6 +24,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_capture_events,
@@ -39,9 +41,9 @@ from custom_components.estia.const import (
     Service,
 )
 from custom_components.estia.const import Event as EstiaEvent
-from custom_components.estia.entity import entity_ids
+from custom_components.estia.entity import unique_id
 
-from .conftest import DIRECTION, DISTANCE, PRESENCE, FakeThermostat, local
+from .conftest import DIRECTION, DISTANCE, PRESENCE, FakeThermostat, Frontend, local
 
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
@@ -49,12 +51,26 @@ if TYPE_CHECKING:
     from custom_components.estia.runtime import EstiaRuntime
 
 
+PLATFORMS = {
+    EntityKey.MODE: "sensor",
+    EntityKey.SCHEDULE: "switch",
+    EntityKey.PREHEAT: "switch",
+    EntityKey.AWAY_SETPOINT: "number",
+    EntityKey.AWAY_DELAY: "number",
+    EntityKey.PREHEAT_RADIUS: "number",
+    EntityKey.RESUME: "button",
+    EntityKey.ALL_OFF: "button",
+}
+
+
 def runtime(entry: MockConfigEntry) -> EstiaRuntime:
     return entry.runtime_data
 
 
 def entity(hass: HomeAssistant, entry: MockConfigEntry, key: EntityKey) -> str:
-    entity_id = entity_ids(hass, entry.entry_id)[key]
+    entity_id = er.async_get(hass).async_get_entity_id(
+        PLATFORMS[key], DOMAIN, unique_id(entry.entry_id, key)
+    )
     assert entity_id is not None
     return entity_id
 
@@ -338,3 +354,22 @@ async def test_unload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     state = hass.states.get(entity(hass, entry, EntityKey.MODE))
     assert state is not None
     assert state.state == "unavailable"
+
+
+async def test_sidebar_panel_follows_entry(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    no_frontend: Frontend,
+) -> None:
+    no_frontend.register_panel.assert_awaited_once_with(hass, entry.entry_id, "Heating", ANY)
+
+    # Options writes (every decision) do not reload or re-register.
+    await by_hand(hass, thermostat, 23.0)
+    assert no_frontend.register_panel.await_count == 1
+
+    hass.config_entries.async_update_entry(entry, title="Riscaldamento")
+    await hass.async_block_till_done()
+    no_frontend.remove_panel.assert_called_once_with(hass, entry.entry_id)
+    no_frontend.register_panel.assert_awaited_with(hass, entry.entry_id, "Riscaldamento", ANY)
+    assert mode(hass, entry) == Mode.MANUAL  # the hold survived the reload

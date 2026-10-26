@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.climate.const import (
@@ -16,6 +16,7 @@ from homeassistant.components.climate.const import (
 from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.const import ATTR_TEMPERATURE, STATE_ON
 from homeassistant.util import dt as dt_util
+from pydantic import BaseModel, ConfigDict
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.estia.config_flow import initial_slots
@@ -47,13 +48,25 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let HA load custom_components/estia."""
 
 
+class Frontend(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    register_card: AsyncMock
+    register_panel: AsyncMock
+    remove_panel: MagicMock
+
+
 @pytest.fixture(autouse=True)
-def no_frontend(hass: HomeAssistant) -> Generator[AsyncMock]:
-    """The card needs the real frontend (not installed for tests): mark its
-    dependencies loaded and skip serving the file."""
-    hass.config.components.update({"frontend", "http"})
-    with patch("custom_components.estia.async_register_card") as register:
-        yield register
+def no_frontend(hass: HomeAssistant) -> Generator[Frontend]:
+    """The card and panel need the real frontend (not installed for tests):
+    mark its dependencies loaded and record the registrations instead."""
+    hass.config.components.update({"frontend", "http", "panel_custom"})
+    with (
+        patch("custom_components.estia.async_register_card") as card,
+        patch("custom_components.estia.async_register_schedule_panel") as panel,
+        patch("custom_components.estia.async_remove_schedule_panel") as remove,
+    ):
+        yield Frontend(register_card=card, register_panel=panel, remove_panel=remove)
 
 
 def local(hh: int, mm: int, day: int = 26) -> datetime:

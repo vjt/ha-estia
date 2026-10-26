@@ -1,6 +1,15 @@
 // Parsing the mode sensor and the timeline arithmetic. No DOM, no Lit.
 
-import { MODES, type Entities, type HassEntity, type Mode, type Schedule, type Slot, type Traveller } from "./types";
+import {
+  MODES,
+  type Entities,
+  type HassEntity,
+  type HomeAssistant,
+  type Mode,
+  type Schedule,
+  type Slot,
+  type Traveller,
+} from "./types";
 
 export const DAY = 24 * 60;
 export const SNAP = 15; // minutes: drag and new-slot granularity
@@ -76,9 +85,6 @@ export function parseSchedule(entity: HassEntity): Schedule {
       direction: asString(field(pair, "direction"), "direction sensor"),
     };
   });
-  const rawEntities = asRecord(field(a, "entities"), "entities");
-  const entity_id = (key: keyof Entities): string | null =>
-    asNullableString(field(rawEntities, key), `entities.${key}`);
   const hold = asNullableString(field(a, "hold_until"), "hold_until");
   const target = field(a, "target");
   return {
@@ -90,19 +96,42 @@ export function parseSchedule(entity: HassEntity): Schedule {
     configEntryId: asString(field(a, "config_entry_id"), "config_entry_id"),
     climate: asString(field(a, "climate_entity"), "climate_entity"),
     proximity,
-    entities: {
-      schedule: entity_id("schedule"),
-      preheat: entity_id("preheat"),
-      away_setpoint: entity_id("away_setpoint"),
-      away_delay: entity_id("away_delay"),
-      preheat_radius: entity_id("preheat_radius"),
-      resume: entity_id("resume"),
-      all_off: entity_id("all_off"),
-    },
     setpointMin: asNumber(field(a, "setpoint_min"), "setpoint_min"),
     setpointMax: asNumber(field(a, "setpoint_max"), "setpoint_max"),
     setpointStep: asNumber(field(a, "setpoint_step"), "setpoint_step"),
   };
+}
+
+const ENTITY_KEYS: readonly (keyof Entities)[] = [
+  "schedule",
+  "preheat",
+  "away_setpoint",
+  "away_delay",
+  "preheat_radius",
+  "resume",
+  "all_off",
+];
+
+/** The mode sensor's sibling entities: same device, Estia platform, keyed by
+ * their translation key. */
+export function companions(hass: HomeAssistant, modeEntityId: string): Entities {
+  const found: Entities = {
+    schedule: null,
+    preheat: null,
+    away_setpoint: null,
+    away_delay: null,
+    preheat_radius: null,
+    resume: null,
+    all_off: null,
+  };
+  const device = hass.entities[modeEntityId]?.device_id ?? null;
+  if (device === null) return found;
+  for (const entry of Object.values(hass.entities)) {
+    if (entry === undefined || entry.platform !== "estia" || entry.device_id !== device) continue;
+    const key = ENTITY_KEYS.find((candidate) => candidate === entry.translation_key);
+    if (key !== undefined) found[key] = entry.entity_id;
+  }
+  return found;
 }
 
 export interface Segment {

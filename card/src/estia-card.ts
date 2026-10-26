@@ -2,9 +2,11 @@
 
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 
+import "./estia-panel";
 import { strings } from "./i18n";
 import {
   DAY,
+  companions,
   dragBounds,
   formatTime,
   minutesNow,
@@ -392,7 +394,8 @@ export class EstiaCard extends LitElement {
   }
 
   private _renderControls(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult {
-    const entities = schedule.entities;
+    if (this.hass === undefined || this._config === undefined) return html``;
+    const entities = companions(this.hass, this._config.entity);
     return html`
       <div class="controls">
         <div class="row">
@@ -717,7 +720,11 @@ export class EstiaCard extends LitElement {
   `;
 }
 
-customElements.define("estia-card", EstiaCard);
+// Guarded: the panel and the dashboards load the same module, and a user may
+// also have added it as a resource by hand.
+if (customElements.get("estia-card") === undefined) {
+  customElements.define("estia-card", EstiaCard);
+}
 
 declare global {
   interface Window {

@@ -67,7 +67,6 @@ class Attr(StrEnum):
     CLIMATE = "climate_entity"
     PRESENCE = "presence_entity"
     PROXIMITY = "proximity"
-    ENTITIES = "entities"
     SETPOINT_MIN = "setpoint_min"
     SETPOINT_MAX = "setpoint_max"
     SETPOINT_STEP = "setpoint_step"

@@ -94,10 +94,13 @@ Two slots cannot start at the same time.
 | `estia_off` | `config_entry_id` (after *All off*) |
 | `estia_resumed` | `config_entry_id`, `target` (after the schedule switch is turned back on) |
 
-## The card
+## The panel and the card
+
+Each schedule gets its own **sidebar item**, titled after the entry (rename
+the entry to rename it), showing the card full page. Nothing to configure.
 
 The card is bundled with the integration and loaded automatically; there is
-no separate resource to add. Add it to a dashboard:
+no separate resource to add. To put it on a dashboard as well:
 
 ```yaml
 type: custom:estia-card

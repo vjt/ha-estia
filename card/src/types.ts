@@ -10,6 +10,8 @@ export interface HassEntity {
 export interface HassEntityRegistryEntry {
   entity_id: string;
   platform: string;
+  device_id: string | null;
+  translation_key: string | null;
 }
 
 export interface HomeAssistant {
@@ -39,6 +41,8 @@ export interface Traveller {
   direction: string;
 }
 
+/** The schedule's other entities, found by device and translation key so
+ * that renaming them does not break the card. Null when not registered. */
 export interface Entities {
   schedule: string | null;
   preheat: string | null;
@@ -59,7 +63,6 @@ export interface Schedule {
   configEntryId: string;
   climate: string;
   proximity: Traveller[];
-  entities: Entities;
   setpointMin: number;
   setpointMax: number;
   setpointStep: number;

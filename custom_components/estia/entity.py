@@ -2,39 +2,16 @@
 
 from __future__ import annotations
 
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import Entity
 
 from .const import DOMAIN, EntityKey
 from .runtime import EstiaConfigEntry, EstiaRuntime
 
-# Which platform each entity lives on, to find its entity_id by unique_id.
-ENTITY_PLATFORMS: dict[EntityKey, Platform] = {
-    EntityKey.MODE: Platform.SENSOR,
-    EntityKey.SCHEDULE: Platform.SWITCH,
-    EntityKey.PREHEAT: Platform.SWITCH,
-    EntityKey.AWAY_SETPOINT: Platform.NUMBER,
-    EntityKey.AWAY_DELAY: Platform.NUMBER,
-    EntityKey.PREHEAT_RADIUS: Platform.NUMBER,
-    EntityKey.RESUME: Platform.BUTTON,
-    EntityKey.ALL_OFF: Platform.BUTTON,
-}
-
 
 def unique_id(entry_id: str, key: EntityKey) -> str:
     return f"{entry_id}_{key}"
-
-
-def entity_ids(hass: HomeAssistant, entry_id: str) -> dict[EntityKey, str | None]:
-    """The entry's entity_ids by key; None for one not (yet) registered."""
-    registry = er.async_get(hass)
-    return {
-        key: registry.async_get_entity_id(platform, DOMAIN, unique_id(entry_id, key))
-        for key, platform in ENTITY_PLATFORMS.items()
-    }
 
 
 class EstiaEntity(Entity):

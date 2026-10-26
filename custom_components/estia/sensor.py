@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import SETPOINT_MAX, SETPOINT_MIN, SETPOINT_STEP, Attr, EntityKey, Mode
-from .entity import EstiaEntity, entity_ids
+from .entity import EstiaEntity
 from .runtime import EstiaConfigEntry
 from .scheduler import active_slot, sorted_slots
 
@@ -54,10 +54,6 @@ class ModeSensor(EstiaEntity, SensorEntity):
             Attr.CLIMATE: runtime.wiring.climate,
             Attr.PRESENCE: runtime.wiring.presence,
             Attr.PROXIMITY: [pair.model_dump() for pair in runtime.wiring.proximity],
-            Attr.ENTITIES: {
-                key.value: entity_id
-                for key, entity_id in entity_ids(self.hass, runtime.entry_id).items()
-            },
             Attr.SETPOINT_MIN: SETPOINT_MIN,
             Attr.SETPOINT_MAX: SETPOINT_MAX,
             Attr.SETPOINT_STEP: SETPOINT_STEP,
