@@ -1,5 +1,7 @@
 # Estia
 
+![Estia](docs/hero.jpg)
+
 A daily heating schedule for Home Assistant that drives any `climate` entity,
 with a Lovelace card to edit it. Named after Estia (Hestia), the Greek goddess
 of the hearth.
