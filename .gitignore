@@ -15,3 +15,4 @@ coverage.xml
 node_modules/
 # Private planning notes (home-specific), not part of the public repo.
 PLAN.md
+.migration/
