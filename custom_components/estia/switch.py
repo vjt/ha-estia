@@ -18,7 +18,7 @@ async def async_setup_entry(
     entry: EstiaConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    async_add_entities([ScheduleSwitch(entry), PreheatSwitch(entry)])
+    async_add_entities([ScheduleSwitch(entry), BoostSwitch(entry), PreheatSwitch(entry)])
 
 
 class ScheduleSwitch(EstiaEntity, SwitchEntity):
@@ -35,6 +35,22 @@ class ScheduleSwitch(EstiaEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._runtime.async_set_schedule_enabled(False)
+
+
+class BoostSwitch(EstiaEntity, SwitchEntity):
+    """The thermostat at its maximum for two hours, then back to what was before."""
+
+    def __init__(self, entry: EstiaConfigEntry) -> None:
+        super().__init__(entry, EntityKey.BOOST)
+
+    def _refresh(self) -> None:
+        self._attr_is_on = self._runtime.state.boost is not None
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._runtime.async_set_boost(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._runtime.async_set_boost(False)
 
 
 class PreheatSwitch(EstiaEntity, SwitchEntity):

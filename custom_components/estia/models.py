@@ -30,6 +30,18 @@ class Wiring(BaseModel):
     proximity: tuple[TravellerSensors, ...]
 
 
+class Boost(BaseModel):
+    """A running boost, and what to go back to when it ends by itself or is
+    switched off: the thermostat off, or the setpoint it had (None when the
+    schedule decides it anyway)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    until: datetime
+    then_off: bool
+    then_setpoint: float | None
+
+
 class StoredState(BaseModel):
     """Entry options: everything the user and the schedule change at runtime.
 
@@ -46,4 +58,5 @@ class StoredState(BaseModel):
     away_delay_min: int
     preheat_radius_km: float
     hold_until: datetime | None
+    boost: Boost | None
     mode: Mode | None

@@ -9,13 +9,17 @@ interface Strings {
   returnToSchedule: string;
   schedule: string;
   allOff: string;
-  allOffAction: string;
   pausedInfo: string;
-  resumeSchedule: string;
   offInfo: string;
-  turnBackOn: string;
-  confirmAllOff: string;
-  awaySection: string;
+  scheduled: string;
+  boost: string;
+  boostUntil: (time: string) => string;
+  settings: string;
+  edit: string;
+  done: string;
+  awaySummary: (setpoint: string, minutes: string) => string;
+  preheatSummary: (km: string) => string;
+  preheatOff: string;
   history: string;
   periods: { hours: number; label: string }[];
   preheat: string;
@@ -27,8 +31,6 @@ interface Strings {
   confirmDelete: string;
   start: string;
   setpoint: string;
-  current: string;
-  target: string;
   noSlots: string;
   unavailable: string;
   full: string;
@@ -40,7 +42,8 @@ const EN: Strings = {
     away: "Away",
     preheat: "Preheat",
     manual: "Manual",
-    paused: "Paused",
+    boost: "Boost",
+    paused: "Manual (no expiry)",
     off: "Off",
   },
   directions: {
@@ -53,14 +56,18 @@ const EN: Strings = {
   returnToSchedule: "Return to schedule",
   schedule: "Schedule",
   allOff: "All off",
-  allOffAction: "Turn off",
   pausedInfo:
-    "Schedule paused: Estia leaves the thermostat alone, the temperature is up to you. Slots, away and preheat are ignored until you resume it.",
-  resumeSchedule: "Resume schedule",
+    "Schedule off: Estia leaves the thermostat alone and keeps the temperature you set, with no end. Slots, away and preheat are ignored until you choose Scheduled again.",
   offInfo: "Heating off: the thermostat is off and Estia does not touch it.",
-  turnBackOn: "Turn back on",
-  confirmAllOff: "Stop the schedule and switch the heating off?",
-  awaySection: "Away and coming home",
+  scheduled: "Scheduled",
+  boost: "Boost",
+  boostUntil: (time) => `Boost: maximum until ${time}, then back to before`,
+  settings: "Schedule",
+  edit: "Edit",
+  done: "Done",
+  awaySummary: (setpoint, minutes) => `Away: ${setpoint} °C after ${minutes} min with nobody home`,
+  preheatSummary: (km) => `Preheat: within ${km} km when someone is heading home`,
+  preheatOff: "Preheat off",
   history: "Temperature",
   periods: [
     { hours: 24, label: "24 hours" },
@@ -76,8 +83,6 @@ const EN: Strings = {
   confirmDelete: "Tap again to delete",
   start: "Start",
   setpoint: "Setpoint",
-  current: "Now",
-  target: "Target",
   noSlots: "No slots: add one with +",
   unavailable: "Schedule unavailable",
   full: "No free start time left",
@@ -89,7 +94,8 @@ const IT: Strings = {
     away: "Fuori casa",
     preheat: "Preriscaldo",
     manual: "Manuale",
-    paused: "Sospeso",
+    boost: "Massimo",
+    paused: "Manuale (senza scadenza)",
     off: "Spento",
   },
   directions: {
@@ -102,14 +108,18 @@ const IT: Strings = {
   returnToSchedule: "Ritorna al programma",
   schedule: "Programma",
   allOff: "Spegni tutto",
-  allOffAction: "Spegni",
   pausedInfo:
-    "Programma in pausa: Estia non tocca il termostato, la temperatura la decidi tu. Fasce, fuori casa e preriscaldo sono ignorati finché non lo riattivi.",
-  resumeSchedule: "Riattiva programma",
+    "Programma spento: Estia non tocca il termostato e tiene la temperatura che hai impostato, senza scadenza. Fasce, fuori casa e preriscaldo sono ignorati finché non scegli di nuovo Pianificato.",
   offInfo: "Riscaldamento spento: il termostato è spento ed Estia non lo tocca.",
-  turnBackOn: "Riaccendi",
-  confirmAllOff: "Spegnere riscaldamento e programma?",
-  awaySection: "Fuori casa e rientro",
+  scheduled: "Pianificato",
+  boost: "Massimo",
+  boostUntil: (time) => `Massimo fino alle ${time}, poi torna com'era`,
+  settings: "Programma",
+  edit: "Modifica",
+  done: "Fatto",
+  awaySummary: (setpoint, minutes) => `Fuori casa: ${setpoint} °C dopo ${minutes} min senza nessuno`,
+  preheatSummary: (km) => `Preriscaldo: entro ${km} km se qualcuno sta tornando`,
+  preheatOff: "Preriscaldo spento",
   history: "Temperatura",
   periods: [
     { hours: 24, label: "24 ore" },
@@ -125,8 +135,6 @@ const IT: Strings = {
   confirmDelete: "Tocca ancora per eliminare",
   start: "Inizio",
   setpoint: "Temperatura",
-  current: "Ora",
-  target: "Obiettivo",
   noSlots: "Nessuna fascia: aggiungine una con +",
   unavailable: "Programma non disponibile",
   full: "Nessun orario libero",

@@ -24,6 +24,10 @@ of the hearth.
   switches the thermostat to heat if it was off, drops any hold and applies the
   schedule at once. *All off* stops the schedule and switches the thermostat
   off.
+- **Boost**: the thermostat at its maximum for two hours, whatever the
+  schedule says, even with the house empty; then back to what was before
+  (thermostat off, the previous setpoint, or the schedule). Turning the dial
+  by hand ends it.
 - **Thermostat off**: while the thermostat is off, the schedule does not touch
   it (mode *Off*); when it is switched back on, the schedule applies at once.
 
@@ -63,8 +67,9 @@ The presence and proximity sensors can be changed later with *Reconfigure*.
 
 | Entity | |
 |---|---|
-| `sensor.<name>_mode` | `home`, `away`, `preheat`, `manual`, `paused` or `off`. Its attributes carry the slots, the active slot, the hold expiry and the target: this is what the card reads. |
+| `sensor.<name>_mode` | `home`, `away`, `preheat`, `manual`, `boost`, `paused` (manual with no expiry) or `off`. Its attributes carry the slots, the active slot, the hold expiry and the target: this is what the card reads. |
 | `switch.<name>_schedule` | Schedule on/off. |
+| `switch.<name>_boost` | Boost on/off (ends by itself after two hours). |
 | `switch.<name>_preheat_on_the_way_home` | Preheat on/off. |
 | `number.<name>_away_setpoint` | Setpoint while the house is empty (default 16 °C). |
 | `number.<name>_away_delay` | Minutes the house must be empty before the away setpoint applies (default 10). |
@@ -112,17 +117,20 @@ entity: sensor.heating_mode
 # title: Living room   # optional, defaults to the thermostat's name
 ```
 
-- The 24 h bar shows one segment per slot, coloured by setpoint, with a
-  marker for now and the active slot outlined.
-- **Drag** the white line at a slot's start to move it (15-minute steps).
-- **Tap** a segment to edit its start time and setpoint (− / +).
-- **Long-press** a segment, then tap *Delete*, to remove it.
-- **+** adds a slot at noon (or in the middle of the longest gap) at the
-  current setpoint.
-- The header shows the mode, the current and target temperature, and while a
-  manual hold is active, its expiry and *Return to schedule*.
-- Below: schedule on/off, *All off*, preheat, the away setpoint, delay and
-  preheat radius, and each tracked person's distance and direction.
+- **Scheduled / Boost / All off**: one choice at a time; choosing one undoes
+  the others. Scheduled off keeps the current temperature with no end.
+- The header shows the mode and, while a manual hold or a boost runs, until
+  when.
+- **Schedule**: the 24 h bar, one segment per slot coloured by setpoint, with
+  a marker for now and the active slot outlined, and a summary of the away
+  and preheat settings. **Edit** unlocks it:
+  - **drag** the white line at a slot's start to move it (15-minute steps);
+  - **tap** a segment to set its start and setpoint (type it, drag the
+    slider, scroll, or − / +);
+  - **long-press** a segment, then tap *Delete*, to remove it;
+  - **+** adds a slot at noon (or in the middle of the longest gap);
+  - the away setpoint, delay, preheat and radius as Home Assistant's own
+    controls (the radius hidden while preheat is off).
 
 English and Italian; other languages fall back to English.
 

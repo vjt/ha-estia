@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.components.climate.const import (
     ATTR_HVAC_MODE,
+    ATTR_MAX_TEMP,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_TEMPERATURE,
     HVACMode,
@@ -84,7 +85,7 @@ class FakeThermostat:
         hass.services.async_register(CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE, self._set_mode)
 
     def set(self, hvac: str, temperature: float | None, context: Context | None) -> None:
-        attributes: dict[str, Any] = {ATTR_TEMPERATURE: temperature}
+        attributes: dict[str, Any] = {ATTR_TEMPERATURE: temperature, ATTR_MAX_TEMP: 25.0}
         self.hass.states.async_set(CLIMATE, hvac, attributes, context=context)
 
     @property
@@ -136,6 +137,7 @@ def make_entry(proximity: tuple[TravellerSensors, ...]) -> MockConfigEntry:
         away_delay_min=INITIAL_AWAY_DELAY_MIN,
         preheat_radius_km=INITIAL_PREHEAT_RADIUS_KM,
         hold_until=None,
+        boost=None,
         mode=None,
     )
     return MockConfigEntry(
@@ -144,6 +146,8 @@ def make_entry(proximity: tuple[TravellerSensors, ...]) -> MockConfigEntry:
         unique_id=CLIMATE,
         data=wiring.model_dump(mode="json"),
         options=state.model_dump(mode="json"),
+        version=1,
+        minor_version=2,
     )
 
 

@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.1.2 — 2026-10-27
 
+### Added
+
+- **Boost**: a switch (and a card button) that runs the thermostat at its
+  maximum for two hours, over the slots, away and a paused schedule, then
+  goes back to what was before: the thermostat off, the setpoint it had, or
+  the schedule. Turning the dial by hand, choosing Scheduled or All off ends
+  it there and then. Entries are migrated (options 1.2: `boost`).
+
 ### Changed
 
+- **Three actions, one choice**: Scheduled, Boost and All off sit side by
+  side in the card, and choosing one undoes the others. Turning Scheduled
+  off keeps the current temperature with no end: the mode formerly called
+  *Paused* is now labelled *Manual (no expiry)*.
+- **Settings shown as a summary**: the timeline and a line each for away and
+  preheat; *Edit* unlocks dragging, the slot editor and the settings, so a
+  scroll on the phone no longer moves a slot.
 - **The panel is a full heating page**: Home Assistant's thermostat card (to
   set the temperature by hand), the schedule card, and the temperature
   history over 24 hours, 7 days or 30 days, side by side on wide screens.

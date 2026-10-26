@@ -113,6 +113,8 @@ def _wiring_schema(defaults: Mapping[str, Any]) -> dict[vol.Marker, Any]:
 
 class EstiaConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    # 1.2: options gained boost (see async_migrate_entry).
+    MINOR_VERSION = 2
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -137,6 +139,7 @@ class EstiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     away_delay_min=INITIAL_AWAY_DELAY_MIN,
                     preheat_radius_km=INITIAL_PREHEAT_RADIUS_KM,
                     hold_until=None,
+                    boost=None,
                     mode=None,
                 )
                 return self.async_create_entry(

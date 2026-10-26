@@ -47,6 +47,8 @@ def snapshot(
     preheat_enabled: bool = True,
     travellers: tuple[Traveller, ...] = (),
     hold_until: datetime | None = None,
+    boost_until: datetime | None = None,
+    max_setpoint: float | None = 25.0,
 ) -> Snapshot:
     return Snapshot(
         schedule_enabled=schedule_enabled,
@@ -59,6 +61,8 @@ def snapshot(
         empty_since=empty_since,
         travellers=travellers,
         hold_until=hold_until,
+        boost_until=boost_until,
+        max_setpoint=max_setpoint,
     )
 
 
@@ -93,101 +97,159 @@ def test_active_slot_none_without_slots() -> None:
     ("snap", "now", "expected"),
     [
         # At home: the active slot.
-        (snapshot(), at(10, 0), Decision(mode=Mode.HOME, target=18.0, hold_until=None)),
+        (
+            snapshot(),
+            at(10, 0),
+            Decision(mode=Mode.HOME, target=18.0, hold_until=None, boost_until=None),
+        ),
         # No slots: nothing to push.
-        (snapshot(slots=()), at(10, 0), Decision(mode=Mode.HOME, target=None, hold_until=None)),
+        (
+            snapshot(slots=()),
+            at(10, 0),
+            Decision(mode=Mode.HOME, target=None, hold_until=None, boost_until=None),
+        ),
         # Empty for less than the delay: still home.
         (
             snapshot(empty_since=at(9, 51)),
             at(10, 0),
-            Decision(mode=Mode.HOME, target=18.0, hold_until=None),
+            Decision(mode=Mode.HOME, target=18.0, hold_until=None, boost_until=None),
         ),
         # Empty for exactly the delay: away.
         (
             snapshot(empty_since=at(9, 50)),
             at(10, 0),
-            Decision(mode=Mode.AWAY, target=15.5, hold_until=None),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Away, someone near and coming home: preheat to the slot.
         (
             snapshot(empty_since=at(8, 0), travellers=(FAR_TOWARDS, NEAR_TOWARDS)),
             at(10, 0),
-            Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None),
+            Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
         ),
         # Near but stationary (a day in town) does not count.
         (
             snapshot(empty_since=at(8, 0), travellers=(NEAR_STATIONARY,)),
             at(10, 0),
-            Decision(mode=Mode.AWAY, target=15.5, hold_until=None),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Heading home but outside the radius.
         (
             snapshot(empty_since=at(8, 0), travellers=(FAR_TOWARDS,)),
             at(10, 0),
-            Decision(mode=Mode.AWAY, target=15.5, hold_until=None),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Distance unknown: not near.
         (
             snapshot(empty_since=at(8, 0), travellers=(UNKNOWN,)),
             at(10, 0),
-            Decision(mode=Mode.AWAY, target=15.5, hold_until=None),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Preheat switched off: away even with someone on the way.
         (
             snapshot(empty_since=at(8, 0), travellers=(NEAR_TOWARDS,), preheat_enabled=False),
             at(10, 0),
-            Decision(mode=Mode.AWAY, target=15.5, hold_until=None),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Hold in force at home: leave the setpoint alone.
         (
             snapshot(hold_until=at(17, 0)),
             at(10, 0),
-            Decision(mode=Mode.MANUAL, target=None, hold_until=at(17, 0)),
+            Decision(mode=Mode.MANUAL, target=None, hold_until=at(17, 0), boost_until=None),
         ),
         # Hold expired: back to the slot, hold dropped.
         (
             snapshot(hold_until=at(9, 0)),
             at(10, 0),
-            Decision(mode=Mode.HOME, target=18.0, hold_until=None),
+            Decision(mode=Mode.HOME, target=18.0, hold_until=None, boost_until=None),
         ),
         # Hold ends at its instant (exclusive).
         (
             snapshot(hold_until=at(10, 0)),
             at(10, 0),
-            Decision(mode=Mode.HOME, target=18.0, hold_until=None),
+            Decision(mode=Mode.HOME, target=18.0, hold_until=None, boost_until=None),
         ),
         # The house going empty overrides the hold and clears it.
         (
             snapshot(hold_until=at(17, 0), empty_since=at(8, 0)),
             at(10, 0),
-            Decision(mode=Mode.AWAY, target=15.5, hold_until=None),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Empty but preheating: the hold still wins over the slots.
         (
             snapshot(hold_until=at(17, 0), empty_since=at(8, 0), travellers=(NEAR_TOWARDS,)),
             at(10, 0),
-            Decision(mode=Mode.MANUAL, target=None, hold_until=at(17, 0)),
+            Decision(mode=Mode.MANUAL, target=None, hold_until=at(17, 0), boost_until=None),
         ),
         # Schedule off: paused, nothing pushed, hold untouched.
         (
             snapshot(schedule_enabled=False, empty_since=at(8, 0), hold_until=at(17, 0)),
             at(10, 0),
-            Decision(mode=Mode.PAUSED, target=None, hold_until=at(17, 0)),
+            Decision(mode=Mode.PAUSED, target=None, hold_until=at(17, 0), boost_until=None),
         ),
         # Thermostat off: off wins over everything, nothing pushed.
         (
             snapshot(hvac_off=True, schedule_enabled=False),
             at(10, 0),
-            Decision(mode=Mode.OFF, target=None, hold_until=None),
+            Decision(mode=Mode.OFF, target=None, hold_until=None, boost_until=None),
         ),
         (
             snapshot(hvac_off=True, empty_since=at(8, 0)),
             at(10, 0),
-            Decision(mode=Mode.OFF, target=None, hold_until=None),
+            Decision(mode=Mode.OFF, target=None, hold_until=None, boost_until=None),
         ),
     ],
 )
 def test_decide(snap: Snapshot, now: datetime, expected: Decision) -> None:
+    assert decide(snap, now) == expected
+
+
+@pytest.mark.parametrize(
+    ("snap", "now", "expected"),
+    [
+        # Boost: the thermostat's maximum, over the slots.
+        (
+            snapshot(boost_until=at(12, 0)),
+            at(10, 0),
+            Decision(mode=Mode.BOOST, target=25.0, hold_until=None, boost_until=at(12, 0)),
+        ),
+        # ... over the house being empty (it was switched on on purpose) ...
+        (
+            snapshot(boost_until=at(12, 0), empty_since=at(8, 0)),
+            at(10, 0),
+            Decision(mode=Mode.BOOST, target=25.0, hold_until=None, boost_until=at(12, 0)),
+        ),
+        # ... over a paused schedule, keeping its hold for afterwards.
+        (
+            snapshot(boost_until=at(12, 0), schedule_enabled=False, hold_until=at(17, 0)),
+            at(10, 0),
+            Decision(mode=Mode.BOOST, target=25.0, hold_until=at(17, 0), boost_until=at(12, 0)),
+        ),
+        # Thermostat maximum unknown (unavailable): boost, nothing pushed.
+        (
+            snapshot(boost_until=at(12, 0), max_setpoint=None),
+            at(10, 0),
+            Decision(mode=Mode.BOOST, target=None, hold_until=None, boost_until=at(12, 0)),
+        ),
+        # Expired: back to what was there before, boost dropped.
+        (
+            snapshot(boost_until=at(10, 0)),
+            at(10, 0),
+            Decision(mode=Mode.HOME, target=18.0, hold_until=None, boost_until=None),
+        ),
+        (
+            snapshot(boost_until=at(9, 0), schedule_enabled=False),
+            at(10, 0),
+            Decision(mode=Mode.PAUSED, target=None, hold_until=None, boost_until=None),
+        ),
+        # Thermostat switched off by hand: off, the boost waits for its end.
+        (
+            snapshot(boost_until=at(12, 0), hvac_off=True),
+            at(10, 0),
+            Decision(mode=Mode.OFF, target=None, hold_until=None, boost_until=at(12, 0)),
+        ),
+    ],
+)
+def test_decide_boost(snap: Snapshot, now: datetime, expected: Decision) -> None:
     assert decide(snap, now) == expected
 
 
@@ -227,6 +289,10 @@ def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: date
         (snapshot(empty_since=at(9, 0)), at(10, 0), at(17, 0)),
         # Nothing scheduled at all.
         (snapshot(slots=()), at(10, 0), None),
+        # The boost ends before the next start.
+        (snapshot(boost_until=at(12, 0)), at(10, 0), at(12, 0)),
+        # Paused: only the end of a boost.
+        (snapshot(schedule_enabled=False, boost_until=at(12, 0)), at(10, 0), at(12, 0)),
         # Paused or off: nothing to wake for.
         (snapshot(schedule_enabled=False), at(10, 0), None),
         (snapshot(hvac_off=True), at(10, 0), None),

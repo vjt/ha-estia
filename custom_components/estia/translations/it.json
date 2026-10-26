@@ -46,23 +46,41 @@
           "away": "Fuori casa",
           "preheat": "Preriscaldo",
           "manual": "Manuale",
-          "paused": "Sospeso",
+          "boost": "Massimo",
+          "paused": "Manuale (senza scadenza)",
           "off": "Spento"
         }
       }
     },
     "switch": {
-      "schedule": { "name": "Programma attivo" },
-      "preheat": { "name": "Preriscaldo al rientro" }
+      "schedule": {
+        "name": "Programma attivo"
+      },
+      "boost": {
+        "name": "Massimo"
+      },
+      "preheat": {
+        "name": "Preriscaldo al rientro"
+      }
     },
     "number": {
-      "away_setpoint": { "name": "Temperatura fuori casa" },
-      "away_delay": { "name": "Ritardo fuori casa" },
-      "preheat_radius": { "name": "Raggio preriscaldo" }
+      "away_setpoint": {
+        "name": "Temperatura fuori casa"
+      },
+      "away_delay": {
+        "name": "Ritardo fuori casa"
+      },
+      "preheat_radius": {
+        "name": "Raggio preriscaldo"
+      }
     },
     "button": {
-      "resume": { "name": "Ritorna al programma" },
-      "all_off": { "name": "Spegni tutto" }
+      "resume": {
+        "name": "Ritorna al programma"
+      },
+      "all_off": {
+        "name": "Spegni tutto"
+      }
     }
   },
   "exceptions": {
@@ -81,34 +99,64 @@
       "name": "Modifica fascia",
       "description": "Cambia ora di inizio e temperatura di una fascia.",
       "fields": {
-        "config_entry_id": { "name": "Programma", "description": "Il programma Estia da modificare." },
-        "slot_id": { "name": "Fascia", "description": "Id della fascia, dall'attributo slots del sensore di modalità." },
-        "start": { "name": "Inizio", "description": "Quando inizia la fascia, ogni giorno." },
-        "setpoint": { "name": "Temperatura", "description": "Temperatura durante la fascia." }
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "slot_id": {
+          "name": "Fascia",
+          "description": "Id della fascia, dall'attributo slots del sensore di modalità."
+        },
+        "start": {
+          "name": "Inizio",
+          "description": "Quando inizia la fascia, ogni giorno."
+        },
+        "setpoint": {
+          "name": "Temperatura",
+          "description": "Temperatura durante la fascia."
+        }
       }
     },
     "add_slot": {
       "name": "Aggiungi fascia",
       "description": "Aggiunge una fascia giornaliera.",
       "fields": {
-        "config_entry_id": { "name": "Programma", "description": "Il programma Estia da modificare." },
-        "start": { "name": "Inizio", "description": "Quando inizia la fascia, ogni giorno." },
-        "setpoint": { "name": "Temperatura", "description": "Temperatura durante la fascia." }
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "start": {
+          "name": "Inizio",
+          "description": "Quando inizia la fascia, ogni giorno."
+        },
+        "setpoint": {
+          "name": "Temperatura",
+          "description": "Temperatura durante la fascia."
+        }
       }
     },
     "remove_slot": {
       "name": "Elimina fascia",
       "description": "Elimina una fascia giornaliera.",
       "fields": {
-        "config_entry_id": { "name": "Programma", "description": "Il programma Estia da modificare." },
-        "slot_id": { "name": "Fascia", "description": "Id della fascia, dall'attributo slots del sensore di modalità." }
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "slot_id": {
+          "name": "Fascia",
+          "description": "Id della fascia, dall'attributo slots del sensore di modalità."
+        }
       }
     },
     "resume": {
       "name": "Ritorna al programma",
       "description": "Annulla il manuale e applica subito il programma.",
       "fields": {
-        "config_entry_id": { "name": "Programma", "description": "Il programma Estia." }
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia."
+        }
       }
     }
   }

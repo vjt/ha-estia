@@ -31,6 +31,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: EstiaConfigEntry) -> bool:
+    """1.1 → 1.2: no boost running. Returns False for a version from the
+    future, which HA reports as a failed migration."""
+    if entry.version > 1:
+        return False
+    if entry.minor_version < 2:
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, "boost": None}, minor_version=2
+        )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: EstiaConfigEntry) -> bool:
     runtime = EstiaRuntime(hass, entry, Wiring.model_validate(entry.data))
     entry.runtime_data = runtime

@@ -15,6 +15,7 @@ class Mode(StrEnum):
     AWAY = "away"
     PREHEAT = "preheat"
     MANUAL = "manual"
+    BOOST = "boost"
     PAUSED = "paused"
     OFF = "off"
 
@@ -49,6 +50,7 @@ class EntityKey(StrEnum):
     MODE = "mode"
     SCHEDULE = "schedule"
     PREHEAT = "preheat"
+    BOOST = "boost"
     AWAY_SETPOINT = "away_setpoint"
     AWAY_DELAY = "away_delay"
     PREHEAT_RADIUS = "preheat_radius"
@@ -62,6 +64,7 @@ class Attr(StrEnum):
     SLOTS = "slots"
     ACTIVE_SLOT = "active_slot"
     HOLD_UNTIL = "hold_until"
+    BOOST_UNTIL = "boost_until"
     TARGET = "target"
     CONFIG_ENTRY_ID = "config_entry_id"
     CLIMATE = "climate_entity"
@@ -104,6 +107,9 @@ INITIAL_SLOT_SETPOINT: Final = 20.0
 INITIAL_AWAY_SETPOINT: Final = 16.0
 INITIAL_AWAY_DELAY_MIN: Final = 10
 INITIAL_PREHEAT_RADIUS_KM: Final = 20.0
+
+# How long Boost holds the thermostat at its maximum before it ends by itself.
+BOOST_DURATION_MIN: Final = 120
 
 # After switching the thermostat back to heat, how long to wait for it to
 # report a numeric setpoint before applying the schedule.

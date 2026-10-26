@@ -54,6 +54,9 @@ class Snapshot(BaseModel):
     empty_since: datetime | None
     travellers: tuple[Traveller, ...]
     hold_until: datetime | None
+    boost_until: datetime | None
+    # The thermostat's max_temp; None while it is unavailable.
+    max_setpoint: float | None
 
 
 class Decision(BaseModel):
@@ -61,7 +64,7 @@ class Decision(BaseModel):
 
     `target` None means leave the setpoint alone. `hold_until` is the manual
     hold to keep: an expired hold, or one overridden by the house going empty,
-    comes back as None.
+    comes back as None. `boost_until` likewise: None once the boost is over.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -69,6 +72,7 @@ class Decision(BaseModel):
     mode: Mode
     target: float | None
     hold_until: datetime | None
+    boost_until: datetime | None
 
 
 def sorted_slots(slots: tuple[Slot, ...]) -> tuple[Slot, ...]:
@@ -117,25 +121,50 @@ def _someone_coming_back(snapshot: Snapshot) -> bool:
 
 
 def decide(snapshot: Snapshot, now: datetime) -> Decision:
-    """The mode and target for now. Total: every snapshot has a decision."""
+    """The mode and target for now. Total: every snapshot has a decision.
+
+    Precedence: thermostat off, boost (switched on on purpose: it wins over
+    everything the schedule would do), paused, away, manual hold, slots.
+    """
+    boost = snapshot.boost_until if _active(snapshot.boost_until, now) else None
     if snapshot.hvac_off:
-        return Decision(mode=Mode.OFF, target=None, hold_until=snapshot.hold_until)
+        return Decision(
+            mode=Mode.OFF, target=None, hold_until=snapshot.hold_until, boost_until=boost
+        )
+    if boost is not None:
+        return Decision(
+            mode=Mode.BOOST,
+            target=snapshot.max_setpoint,
+            hold_until=snapshot.hold_until,
+            boost_until=boost,
+        )
     if not snapshot.schedule_enabled:
-        return Decision(mode=Mode.PAUSED, target=None, hold_until=snapshot.hold_until)
+        return Decision(
+            mode=Mode.PAUSED, target=None, hold_until=snapshot.hold_until, boost_until=None
+        )
 
     empty = _is_empty(snapshot, now)
     if empty and not _someone_coming_back(snapshot):
-        return Decision(mode=Mode.AWAY, target=snapshot.away_setpoint, hold_until=None)
+        return Decision(
+            mode=Mode.AWAY, target=snapshot.away_setpoint, hold_until=None, boost_until=None
+        )
 
-    if snapshot.hold_until is not None and now < snapshot.hold_until:
-        return Decision(mode=Mode.MANUAL, target=None, hold_until=snapshot.hold_until)
+    if _active(snapshot.hold_until, now):
+        return Decision(
+            mode=Mode.MANUAL, target=None, hold_until=snapshot.hold_until, boost_until=None
+        )
 
     slot = active_slot(snapshot.slots, now)
     return Decision(
         mode=Mode.PREHEAT if empty else Mode.HOME,
         target=slot.setpoint if slot is not None else None,
         hold_until=None,
+        boost_until=None,
     )
+
+
+def _active(until: datetime | None, now: datetime) -> bool:
+    return until is not None and now < until
 
 
 def next_wakeup(snapshot: Snapshot, now: datetime) -> datetime | None:
@@ -144,9 +173,13 @@ def next_wakeup(snapshot: Snapshot, now: datetime) -> datetime | None:
 
     None when nothing is scheduled (or the schedule is paused or off).
     """
-    if snapshot.hvac_off or not snapshot.schedule_enabled:
+    if snapshot.hvac_off:
         return None
     candidates: list[datetime] = []
+    if snapshot.boost_until is not None and snapshot.boost_until > now:
+        candidates.append(snapshot.boost_until)
+    if not snapshot.schedule_enabled:
+        return min(candidates) if candidates else None
     if snapshot.slots:
         candidates.append(hold_until_after(snapshot.slots, now))
     if snapshot.hold_until is not None and snapshot.hold_until > now:

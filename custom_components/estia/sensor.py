@@ -49,6 +49,7 @@ class ModeSensor(EstiaEntity, SensorEntity):
             ],
             Attr.ACTIVE_SLOT: active.id if active is not None else None,
             Attr.HOLD_UNTIL: state.hold_until.isoformat() if state.hold_until else None,
+            Attr.BOOST_UNTIL: state.boost.until.isoformat() if state.boost else None,
             Attr.TARGET: decision.target if decision is not None else None,
             Attr.CONFIG_ENTRY_ID: runtime.entry_id,
             Attr.CLIMATE: runtime.wiring.climate,

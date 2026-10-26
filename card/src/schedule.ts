@@ -86,12 +86,14 @@ export function parseSchedule(entity: HassEntity): Schedule {
     };
   });
   const hold = asNullableString(field(a, "hold_until"), "hold_until");
+  const boost = asNullableString(field(a, "boost_until"), "boost_until");
   const target = field(a, "target");
   return {
     mode: parseMode(entity.state),
     slots: slots.sort((x, y) => x.start - y.start),
     activeSlot: asNullableString(field(a, "active_slot"), "active_slot"),
     holdUntil: hold === null ? null : new Date(hold),
+    boostUntil: boost === null ? null : new Date(boost),
     target: target === null ? null : asNumber(target, "target"),
     configEntryId: asString(field(a, "config_entry_id"), "config_entry_id"),
     climate: asString(field(a, "climate_entity"), "climate_entity"),
@@ -104,6 +106,7 @@ export function parseSchedule(entity: HassEntity): Schedule {
 
 const ENTITY_KEYS: readonly (keyof Entities)[] = [
   "schedule",
+  "boost",
   "preheat",
   "away_setpoint",
   "away_delay",
@@ -117,6 +120,7 @@ const ENTITY_KEYS: readonly (keyof Entities)[] = [
 export function companions(hass: HomeAssistant, modeEntityId: string): Entities {
   const found: Entities = {
     schedule: null,
+    boost: null,
     preheat: null,
     away_setpoint: null,
     away_delay: null,

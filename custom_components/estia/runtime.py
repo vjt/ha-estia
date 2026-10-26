@@ -10,6 +10,7 @@ from datetime import datetime, time, timedelta
 
 from homeassistant.components.climate.const import (
     ATTR_HVAC_MODE,
+    ATTR_MAX_TEMP,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_TEMPERATURE,
     HVACMode,
@@ -45,9 +46,9 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import DistanceConverter
 
-from .const import DOMAIN, HVAC_ON_SETTLE_SECONDS, Direction, Field
+from .const import BOOST_DURATION_MIN, DOMAIN, HVAC_ON_SETTLE_SECONDS, Direction, Field
 from .const import Event as EstiaEvent
-from .models import StoredState, TravellerSensors, Wiring
+from .models import Boost, StoredState, TravellerSensors, Wiring
 from .scheduler import (
     Decision,
     Slot,
@@ -74,6 +75,15 @@ def _setpoint_of(state: State) -> float | None:
     value = state.attributes[ATTR_TEMPERATURE]
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
+    return float(value)
+
+
+def _max_setpoint_of(state: State | None) -> float | None:
+    """The thermostat's max_temp; None when it is unavailable (climate
+    entities always report it otherwise)."""
+    if state is None or state.state in _MISSING:
+        return None
+    value = state.attributes[ATTR_MAX_TEMP]
     return float(value)
 
 
@@ -171,6 +181,8 @@ class EstiaRuntime:
             ),
             travellers=tuple(_parse_traveller(self._hass, pair) for pair in self.wiring.proximity),
             hold_until=self.state.hold_until,
+            boost_until=self.state.boost.until if self.state.boost is not None else None,
+            max_setpoint=_max_setpoint_of(climate),
         )
 
     # -- applying ----------------------------------------------------------
@@ -190,10 +202,15 @@ class EstiaRuntime:
         snapshot = self._snapshot()
         decision = decide(snapshot, now)
         previous = self.state.mode
+        ended = self.state.boost if decision.boost_until is None else None
         self.decision = decision
         self._commit(
             self.state.model_copy(
-                update={"hold_until": decision.hold_until, "mode": decision.mode}
+                update={
+                    "hold_until": decision.hold_until,
+                    "boost": self.state.boost if ended is None else None,
+                    "mode": decision.mode,
+                }
             )
         )
         self._schedule_wakeup(next_wakeup(snapshot, now))
@@ -206,18 +223,24 @@ class EstiaRuntime:
                 Field.AWAY_SETPOINT: self.state.away_setpoint,
             }
             self._hass.bus.async_fire(EstiaEvent.MODE_CHANGED, payload)
-        if decision.target is None:
+        if ended is not None and ended.then_off:
+            await self._async_set_hvac_mode(HVACMode.OFF)
+            return
+        target = decision.target
+        if target is None and ended is not None:
+            target = ended.then_setpoint
+        if target is None:
             return
         climate = self._hass.states.get(self.wiring.climate)
         if climate is None or climate.state in _MISSING:
             # Applied again when it comes back (see _on_climate_change).
             return
-        if _setpoint_of(climate) == decision.target:
+        if _setpoint_of(climate) == target:
             return
         await self._hass.services.async_call(
             CLIMATE_DOMAIN,
             SERVICE_SET_TEMPERATURE,
-            {ATTR_ENTITY_ID: self.wiring.climate, ATTR_TEMPERATURE: decision.target},
+            {ATTR_ENTITY_ID: self.wiring.climate, ATTR_TEMPERATURE: target},
             blocking=True,
             context=self._child_context(parent),
         )
@@ -271,8 +294,9 @@ class EstiaRuntime:
             self._hass.async_create_task(self.async_apply(event.context))
             return
         before, after = _setpoint_of(old), _setpoint_of(new)
+        boosting = self.state.boost is not None
         if (
-            self.state.schedule_enabled
+            (self.state.schedule_enabled or boosting)
             and new.context.parent_id is None
             and before is not None
             and after is not None
@@ -281,11 +305,16 @@ class EstiaRuntime:
             self._hass.async_create_task(self._async_hold(event.context))
 
     async def _async_hold(self, context: Context) -> None:
-        """A setpoint set by hand holds until the next slot starts."""
+        """A setpoint set by hand ends any boost and, with the schedule on,
+        holds until the next slot starts (paused, it is kept anyway)."""
         async with self._lock:
-            until = hold_until_after(self.state.slots, dt_util.now())
+            until = (
+                hold_until_after(self.state.slots, dt_util.now())
+                if self.state.schedule_enabled
+                else None
+            )
             _LOGGER.debug("Manual setpoint on %s, holding until %s", self.wiring.climate, until)
-            self._commit(self.state.model_copy(update={"hold_until": until}))
+            self._commit(self.state.model_copy(update={"hold_until": until, "boost": None}))
             await self._async_apply_locked(context)
 
     # -- mutators (entities and services) ----------------------------------
@@ -322,14 +351,14 @@ class EstiaRuntime:
         """Off: leave the thermostat alone. On (from off): switch it back to
         heat if it was off, drop the hold, apply now and announce it."""
         if not enabled:
-            await self._async_update(schedule_enabled=False)
+            await self._async_update(schedule_enabled=False, boost=None)
             return
         if self.state.schedule_enabled:
+            # Already on: choosing it again ends a boost, if any.
+            await self._async_update(boost=None)
             return
-        if self._climate_state() == HVACMode.OFF:
-            await self._async_set_hvac_mode(HVACMode.HEAT)
-            await self._async_wait_for_setpoint()
-        await self._async_update(schedule_enabled=True, hold_until=None)
+        await self._async_heat_on()
+        await self._async_update(schedule_enabled=True, hold_until=None, boost=None)
         climate = self._hass.states.get(self.wiring.climate)
         payload: dict[str, str | float | None] = {
             Field.CONFIG_ENTRY_ID: self.entry_id,
@@ -337,9 +366,36 @@ class EstiaRuntime:
         }
         self._hass.bus.async_fire(EstiaEvent.RESUMED, payload)
 
+    async def async_set_boost(self, enabled: bool) -> None:
+        """On: the thermostat at its maximum for BOOST_DURATION_MIN, switched
+        to heat if it was off. Off, or at its end: back to what was before
+        (thermostat off, the previous setpoint, or the schedule)."""
+        if not enabled:
+            if self.state.boost is not None:
+                # Ends now: the next decision restores, as on expiry.
+                ending = self.state.boost.model_copy(update={"until": dt_util.now()})
+                await self._async_update(boost=ending)
+            return
+        if self.state.boost is not None:
+            return
+        climate = self._hass.states.get(self.wiring.climate)
+        was_off = climate is not None and climate.state == HVACMode.OFF
+        boost = Boost(
+            until=dt_util.now() + timedelta(minutes=BOOST_DURATION_MIN),
+            then_off=was_off,
+            then_setpoint=None if was_off or climate is None else _setpoint_of(climate),
+        )
+        await self._async_heat_on()
+        await self._async_update(boost=boost)
+
+    async def _async_heat_on(self) -> None:
+        if self._climate_state() == HVACMode.OFF:
+            await self._async_set_hvac_mode(HVACMode.HEAT)
+            await self._async_wait_for_setpoint()
+
     async def async_all_off(self) -> None:
-        """Stop the schedule and switch the thermostat off."""
-        await self._async_update(schedule_enabled=False)
+        """Stop the schedule and any boost, switch the thermostat off."""
+        await self._async_update(schedule_enabled=False, boost=None)
         await self._async_set_hvac_mode(HVACMode.OFF)
         payload: dict[str, str] = {Field.CONFIG_ENTRY_ID: self.entry_id}
         self._hass.bus.async_fire(EstiaEvent.OFF, payload)

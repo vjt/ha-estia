@@ -27,8 +27,8 @@ export interface CardConfig {
   title?: string;
 }
 
-export type Mode = "home" | "away" | "preheat" | "manual" | "paused" | "off";
-export const MODES: readonly Mode[] = ["home", "away", "preheat", "manual", "paused", "off"];
+export type Mode = "home" | "away" | "preheat" | "manual" | "boost" | "paused" | "off";
+export const MODES: readonly Mode[] = ["home", "away", "preheat", "manual", "boost", "paused", "off"];
 
 export interface Slot {
   id: string;
@@ -45,6 +45,7 @@ export interface Traveller {
  * that renaming them does not break the card. Null when not registered. */
 export interface Entities {
   schedule: string | null;
+  boost: string | null;
   preheat: string | null;
   away_setpoint: string | null;
   away_delay: string | null;
@@ -59,6 +60,7 @@ export interface Schedule {
   slots: Slot[];
   activeSlot: string | null;
   holdUntil: Date | null;
+  boostUntil: Date | null;
   target: number | null;
   configEntryId: string;
   climate: string;

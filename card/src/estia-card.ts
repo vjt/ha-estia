@@ -33,6 +33,7 @@ const MODE_COLORS: Record<Mode, string> = {
   away: "var(--info-color, #039be5)",
   preheat: "var(--warning-color, #ffa600)",
   manual: "var(--accent-color, #ff9800)",
+  boost: "var(--error-color, #db4437)",
   paused: "var(--disabled-text-color, #9e9e9e)",
   off: "var(--secondary-text-color, #727272)",
 };
@@ -76,6 +77,7 @@ export class EstiaCard extends LitElement {
     _pending: { state: true },
     _armedDelete: { state: true },
     _error: { state: true },
+    _editing: { state: true },
   };
 
   declare hass: HomeAssistant | undefined;
@@ -85,6 +87,7 @@ export class EstiaCard extends LitElement {
   declare _pending: PendingSetpoint | null;
   declare _armedDelete: string | null;
   declare _error: string | null;
+  declare _editing: boolean;
 
   private _clock: number | undefined;
   private readonly _native = new NativeCards(() => this.requestUpdate());
@@ -100,6 +103,7 @@ export class EstiaCard extends LitElement {
     this._pending = null;
     this._armedDelete = null;
     this._error = null;
+    this._editing = false;
   }
 
   setConfig(config: CardConfig): void {
@@ -288,15 +292,31 @@ export class EstiaCard extends LitElement {
     }
     const climate = this.hass.states[schedule.climate];
     const slots = this._withDrag(schedule.slots);
-    const selected = slots.find((slot) => slot.id === this._selected);
+    const selected = this._editing ? slots.find((slot) => slot.id === this._selected) : undefined;
     return html`
       <ha-card>
-        ${this._renderHeader(schedule, climate, t)} ${this._renderTimeline(schedule, slots, t)}
-        ${selected === undefined ? nothing : this._renderEditor(schedule, selected, t)}
+        ${this._renderHeader(schedule, climate, t)} ${this._renderActions(schedule, t)}
         ${this._error === null ? nothing : html`<div class="message error">${this._error}</div>`}
       </ha-card>
-      ${this._renderControls(schedule, t)}
+      <ha-card>
+        <div class="settings-head">
+          <span class="section">${t.settings}</span>
+          <button class=${this._editing ? "primary" : ""} @click=${() => this._toggleEditing()}>
+            ${this._editing ? t.done : t.edit}
+          </button>
+        </div>
+        ${this._renderTimeline(schedule, slots, t)}
+        ${selected === undefined ? nothing : this._renderEditor(schedule, selected, t)}
+        ${this._editing ? nothing : this._renderSummary(schedule, t)}
+      </ha-card>
+      ${this._editing ? this._renderControls(t) : nothing}
     `;
+  }
+
+  private _toggleEditing(): void {
+    this._editing = !this._editing;
+    this._selected = null;
+    this._armedDelete = null;
   }
 
   /** Slots with the one being dragged at its provisional start. */
@@ -312,8 +332,6 @@ export class EstiaCard extends LitElement {
     t: ReturnType<typeof strings>,
   ): TemplateResult {
     const title = this._config?.title ?? stringAttr(climate, "friendly_name") ?? schedule.climate;
-    const current = numberAttr(climate, "current_temperature");
-    const target = numberAttr(climate, "temperature");
     const mode = schedule.mode;
     return html`
       <div class="header">
@@ -322,10 +340,9 @@ export class EstiaCard extends LitElement {
           ? nothing
           : html`<span class="badge" style="background:${MODE_COLORS[mode]}">${t.modes[mode]}</span>`}
       </div>
-      <div class="temps">
-        <div><span class="label">${t.current}</span><span class="big">${current === null ? "—" : `${current.toFixed(1)}°`}</span></div>
-        <div><span class="label">${t.target}</span><span class="big">${target === null ? "—" : `${target.toFixed(1)}°`}</span></div>
-      </div>
+      ${mode === "boost" && schedule.boostUntil !== null
+        ? html`<div class="hold"><span>${t.boostUntil(formatTime(minutesNow(schedule.boostUntil)))}</span></div>`
+        : nothing}
       ${mode === "manual" && schedule.holdUntil !== null
         ? html`<div class="hold">
             <span>${t.manualUntil(formatTime(minutesNow(schedule.holdUntil)))}</span>
@@ -337,35 +354,68 @@ export class EstiaCard extends LitElement {
             </button>
           </div>`
         : nothing}
-      ${mode === "paused" ? this._notice(t.pausedInfo, t.resumeSchedule, () => this._resumeSchedule()) : nothing}
-      ${mode === "off" ? this._notice(t.offInfo, t.turnBackOn, () => this._turnBackOn(schedule)) : nothing}
+      ${mode === "paused" ? html`<div class="hold"><span>${t.pausedInfo}</span></div>` : nothing}
+      ${mode === "off" ? html`<div class="hold"><span>${t.offInfo}</span></div>` : nothing}
     `;
   }
 
-  private _notice(text: string, action: string, onClick: () => Promise<void>): TemplateResult {
-    return html`<div class="hold">
-      <span>${text}</span>
-      <button class="primary" @click=${onClick}>${action}</button>
+  /** Scheduled / Boost / Off: one choice, each undoing the others. */
+  private _renderActions(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
+    if (this.hass === undefined || this._config === undefined) return nothing;
+    const e = companions(this.hass, this._config.entity);
+    const mode = schedule.mode;
+    const scheduleOn = e.schedule !== null && this.hass.states[e.schedule]?.state === "on";
+    const scheduled = scheduleOn && mode !== "boost" && mode !== "off";
+    const boosting = mode === "boost";
+    const off = mode === "off";
+    const action = (
+      active: boolean,
+      icon: string,
+      label: string,
+      onClick: () => Promise<void>,
+    ): TemplateResult => html`<button class="action ${active ? "active" : ""}" @click=${onClick}>
+      <ha-icon .icon=${icon}></ha-icon><span>${label}</span>
+    </button>`;
+    return html`<div class="actions">
+      ${action(scheduled, "mdi:calendar-clock", t.scheduled, async () => {
+        if (e.schedule === null) return;
+        await this._call("switch", scheduled ? "turn_off" : "turn_on", { entity_id: e.schedule });
+      })}
+      ${action(boosting, "mdi:fire", t.boost, async () => {
+        if (e.boost === null) return;
+        await this._call("switch", boosting ? "turn_off" : "turn_on", { entity_id: e.boost });
+      })}
+      ${action(off, "mdi:power", t.allOff, async () => {
+        if (e.all_off === null || off) return;
+        await this._call("button", "press", { entity_id: e.all_off });
+      })}
     </div>`;
   }
 
-  /** Schedule switch on: heat if off, hold dropped, schedule applied. */
-  private async _resumeSchedule(): Promise<void> {
-    if (this.hass === undefined || this._config === undefined) return;
-    const schedule = companions(this.hass, this._config.entity).schedule;
-    if (schedule !== null) await this._call("switch", "turn_on", { entity_id: schedule });
-  }
-
-  /** After All off the schedule is off too: resuming it turns the heating
-   * back on. If only the thermostat was switched off, switch it to heat. */
-  private async _turnBackOn(schedule: Schedule): Promise<void> {
-    if (this.hass === undefined || this._config === undefined) return;
-    const switchId = companions(this.hass, this._config.entity).schedule;
-    if (switchId !== null && this.hass.states[switchId]?.state === "off") {
-      await this._call("switch", "turn_on", { entity_id: switchId });
-    } else {
-      await this._call("climate", "set_hvac_mode", { entity_id: schedule.climate, hvac_mode: "heat" });
-    }
+  /** The settings at a glance, while not editing. */
+  private _renderSummary(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
+    if (this.hass === undefined || this._config === undefined) return nothing;
+    const hass = this.hass;
+    const e = companions(hass, this._config.entity);
+    const value = (entity: string | null): string =>
+      entity === null ? "—" : (hass.states[entity]?.state ?? "—");
+    const preheatOn = e.preheat !== null && hass.states[e.preheat]?.state === "on";
+    return html`<div class="summary">
+      <div>${t.awaySummary(value(e.away_setpoint), value(e.away_delay))}</div>
+      <div>${preheatOn ? t.preheatSummary(value(e.preheat_radius)) : t.preheatOff}</div>
+      ${preheatOn
+        ? schedule.proximity.map((pair) => {
+            const distance = hass.states[pair.distance];
+            const direction = hass.states[pair.direction];
+            const name = stringAttr(distance, "friendly_name") ?? pair.distance;
+            const unit = stringAttr(distance, "unit_of_measurement") ?? "";
+            const where = direction === undefined ? "—" : (t.directions[direction.state] ?? direction.state);
+            return html`<div class="secondary">
+              ${name}: ${distance === undefined ? "—" : `${distance.state} ${unit}`}, ${where}
+            </div>`;
+          })
+        : nothing}
+    </div>`;
   }
 
   private _renderTimeline(schedule: Schedule, slots: Slot[], t: ReturnType<typeof strings>): TemplateResult {
@@ -373,7 +423,7 @@ export class EstiaCard extends LitElement {
     const low = Math.min(...slots.map((slot) => slot.setpoint), 16);
     const high = Math.max(...slots.map((slot) => slot.setpoint), 23);
     return html`
-      <div class="timeline">
+      <div class="timeline ${this._editing ? "editing" : ""}">
         <div class="bar">
           ${slots.length === 0 ? html`<div class="empty">${t.noSlots}</div>` : nothing}
           ${segments(slots).map((segment) => {
@@ -383,15 +433,15 @@ export class EstiaCard extends LitElement {
             return html`<div
               class="segment ${active ? "active" : ""} ${slot.id === this._selected ? "selected" : ""}"
               style="left:${percent(segment.from)};width:${percent(segment.to - segment.from)};background:${setpointColor(pending, low, high)}"
-              @pointerdown=${() => this._onSegmentDown(slot)}
-              @pointerup=${() => this._onSegmentUp(slot)}
+              @pointerdown=${() => this._editing && this._onSegmentDown(slot)}
+              @pointerup=${() => this._editing && this._onSegmentUp(slot)}
               @pointerleave=${() => window.clearTimeout(this._longPress)}
               @contextmenu=${(event: Event) => event.preventDefault()}
             >
               ${segment.to - segment.from >= 100 ? html`<span>${pending.toFixed(1)}°</span>` : nothing}
             </div>`;
           })}
-          ${slots.map(
+          ${(this._editing ? slots : []).map(
             (slot) => html`<div
               class="handle ${this._drag?.id === slot.id ? "dragging" : ""}"
               style="left:${percent(slot.start)}"
@@ -409,9 +459,15 @@ export class EstiaCard extends LitElement {
         <div class="ticks">
           ${[0, 6, 12, 18, 24].map((hour) => html`<span style="left:${percent(hour * 60)}">${hour}</span>`)}
         </div>
-        <button class="add" title=${t.addSlot} @click=${() => this._add(schedule, this.hass?.states[schedule.climate])}>
-          +
-        </button>
+        ${this._editing
+          ? html`<button
+              class="add"
+              title=${t.addSlot}
+              @click=${() => this._add(schedule, this.hass?.states[schedule.climate])}
+            >
+              +
+            </button>`
+          : nothing}
       </div>
     `;
   }
@@ -468,38 +524,17 @@ export class EstiaCard extends LitElement {
 
   /** The schedule's knobs as Home Assistant's own entities card: native
    * switches, number boxes and the travellers' proximity sensors. */
-  private _renderControls(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
+  private _renderControls(t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
     if (this.hass === undefined || this._config === undefined) return nothing;
     const e = companions(this.hass, this._config.entity);
     const row = (entity: string | null, name: string): Record<string, unknown>[] =>
       entity === null ? [] : [{ entity, name }];
     const rows: Record<string, unknown>[] = [
-      ...row(e.schedule, t.schedule),
-      ...(e.all_off === null
-        ? []
-        : [
-            {
-              type: "button",
-              name: t.allOff,
-              icon: "mdi:power",
-              action_name: t.allOffAction,
-              tap_action: {
-                action: "perform-action",
-                perform_action: "button.press",
-                target: { entity_id: e.all_off },
-                confirmation: { text: t.confirmAllOff },
-              },
-            },
-          ]),
-      { type: "section", label: t.awaySection },
       ...row(e.away_setpoint, t.awaySetpoint),
       ...row(e.away_delay, t.awayDelay),
       ...row(e.preheat, t.preheat),
-      // Radius and travellers only matter while preheat is on.
-      ...[
-        ...row(e.preheat_radius, t.preheatRadius),
-        ...schedule.proximity.flatMap((pair) => [{ entity: pair.distance }, { entity: pair.direction }]),
-      ].map((preheatRow) =>
+      // The radius only matters while preheat is on.
+      ...row(e.preheat_radius, t.preheatRadius).map((preheatRow) =>
         e.preheat === null
           ? preheatRow
           : {
@@ -542,16 +577,6 @@ export class EstiaCard extends LitElement {
       font-weight: 500;
       white-space: nowrap;
     }
-    .temps {
-      display: flex;
-      gap: 32px;
-      margin: 12px 0 16px;
-    }
-    .temps div {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
     .stepper {
       display: flex;
       align-items: center;
@@ -572,14 +597,58 @@ export class EstiaCard extends LitElement {
       justify-content: space-between;
       gap: 12px;
       padding: 12px 16px;
-      margin-bottom: 16px;
+      margin-top: 16px;
       border-radius: var(--estia-radius);
       background: var(--secondary-background-color);
       font-size: 1.05em;
     }
     .timeline {
       position: relative;
-      padding: 24px 60px 4px 0;
+      padding: 24px 0 4px 0;
+    }
+    .timeline.editing {
+      padding-right: 60px;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .action {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-height: 72px;
+      border-radius: 14px;
+      font-size: 1em;
+      font-weight: 500;
+      border: 2px solid transparent;
+    }
+    .action.active {
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .section {
+      font-size: 1.2em;
+      font-weight: 500;
+    }
+    .summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 12px;
+      font-size: 1em;
+    }
+    .secondary {
+      color: var(--secondary-text-color);
     }
     .bar {
       position: relative;

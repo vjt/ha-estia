@@ -44,7 +44,15 @@ from custom_components.estia.const import (
 from custom_components.estia.const import Event as EstiaEvent
 from custom_components.estia.entity import unique_id
 
-from .conftest import DIRECTION, DISTANCE, PRESENCE, FakeThermostat, Frontend, local
+from .conftest import (
+    DIRECTION,
+    DISTANCE,
+    PRESENCE,
+    FakeThermostat,
+    Frontend,
+    local,
+    make_entry,
+)
 
 if TYPE_CHECKING:
     from freezegun.api import FrozenDateTimeFactory
@@ -56,6 +64,7 @@ PLATFORMS = {
     EntityKey.MODE: "sensor",
     EntityKey.SCHEDULE: "switch",
     EntityKey.PREHEAT: "switch",
+    EntityKey.BOOST: "switch",
     EntityKey.AWAY_SETPOINT: "number",
     EntityKey.AWAY_DELAY: "number",
     EntityKey.PREHEAT_RADIUS: "number",
@@ -390,3 +399,121 @@ async def test_sidebar_panel_follows_names(
     await hass.async_block_till_done()
     assert panel_titles(no_frontend) == ["Heating", "Estia", "Living room"]
     assert mode(hass, entry) == Mode.MANUAL  # no reload: the hold is untouched
+
+
+async def switch(hass: HomeAssistant, entry: MockConfigEntry, key: EntityKey, on: bool) -> None:
+    await hass.services.async_call(
+        SWITCH_DOMAIN,
+        SERVICE_TURN_ON if on else SERVICE_TURN_OFF,
+        {ATTR_ENTITY_ID: entity(hass, entry, key)},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+
+def is_on(hass: HomeAssistant, entry: MockConfigEntry, key: EntityKey) -> bool:
+    state = hass.states.get(entity(hass, entry, key))
+    assert state is not None
+    return state.state == STATE_ON
+
+
+async def test_boost_runs_two_hours_then_back_to_schedule(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    await switch(hass, entry, EntityKey.BOOST, True)
+    assert mode(hass, entry) == Mode.BOOST
+    assert thermostat.setpoint == 25.0  # the thermostat's max_temp
+    assert is_on(hass, entry, EntityKey.BOOST)
+
+    # The house going empty does not stop it.
+    hass.states.async_set(PRESENCE, STATE_OFF)
+    await advance(hass, freezer, timedelta(minutes=30))
+    assert mode(hass, entry) == Mode.BOOST
+
+    hass.states.async_set(PRESENCE, STATE_ON)
+    await advance(hass, freezer, timedelta(minutes=90))
+    assert mode(hass, entry) == Mode.HOME
+    assert thermostat.setpoint == 20.0
+    assert not is_on(hass, entry, EntityKey.BOOST)
+
+
+async def test_boost_from_all_off_goes_back_off(
+    hass: HomeAssistant, entry: MockConfigEntry, thermostat: FakeThermostat
+) -> None:
+    await hass.services.async_call(
+        BUTTON_DOMAIN,
+        SERVICE_PRESS,
+        {ATTR_ENTITY_ID: entity(hass, entry, EntityKey.ALL_OFF)},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    await switch(hass, entry, EntityKey.BOOST, True)
+    assert thermostat.hvac == HVACMode.HEAT
+    assert thermostat.setpoint == 25.0
+
+    await switch(hass, entry, EntityKey.BOOST, False)
+    assert thermostat.hvac == HVACMode.OFF
+    assert mode(hass, entry) == Mode.OFF
+    assert not is_on(hass, entry, EntityKey.SCHEDULE)
+
+
+async def test_boost_from_manual_restores_the_setpoint(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    await switch(hass, entry, EntityKey.SCHEDULE, False)
+    await by_hand(hass, thermostat, 22.0)
+    await switch(hass, entry, EntityKey.BOOST, True)
+    assert thermostat.setpoint == 25.0
+
+    await advance(hass, freezer, timedelta(minutes=120))
+    assert mode(hass, entry) == Mode.PAUSED
+    assert thermostat.setpoint == 22.0
+
+
+async def test_manual_change_ends_boost(
+    hass: HomeAssistant, entry: MockConfigEntry, thermostat: FakeThermostat
+) -> None:
+    await switch(hass, entry, EntityKey.BOOST, True)
+    await by_hand(hass, thermostat, 21.5)
+    assert mode(hass, entry) == Mode.MANUAL
+    assert thermostat.setpoint == 21.5
+    assert not is_on(hass, entry, EntityKey.BOOST)
+
+
+async def test_schedule_ends_boost(
+    hass: HomeAssistant, entry: MockConfigEntry, thermostat: FakeThermostat
+) -> None:
+    await switch(hass, entry, EntityKey.BOOST, True)
+    await switch(hass, entry, EntityKey.SCHEDULE, True)
+    assert mode(hass, entry) == Mode.HOME
+    assert thermostat.setpoint == 20.0
+    assert not is_on(hass, entry, EntityKey.BOOST)
+
+
+async def test_migrates_entries_without_boost(
+    hass: HomeAssistant, thermostat: FakeThermostat, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(local(10, 0))
+    old = make_entry(())
+    options = {key: value for key, value in old.options.items() if key != "boost"}
+    legacy = MockConfigEntry(
+        domain=DOMAIN,
+        title=old.title,
+        unique_id=old.unique_id,
+        data=dict(old.data),
+        options=options,
+        version=1,
+        minor_version=1,
+    )
+    legacy.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(legacy.entry_id)
+    await hass.async_block_till_done()
+    assert legacy.minor_version == 2
+    assert legacy.options["boost"] is None
+    assert thermostat.setpoint == 20.0
