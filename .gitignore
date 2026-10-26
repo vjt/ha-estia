@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.pyright/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+.env
+.claude/*
+!.claude/skills
+node_modules/
+# Private planning notes (home-specific), not part of the public repo.
+PLAN.md

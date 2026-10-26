@@ -1,0 +1,74 @@
+[project]
+name = "ha-estia"
+version = "0.1.0"
+description = "Home Assistant heating schedule: daily slots, away, preheat, manual hold"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+authors = [
+    {name = "Marcello Barnaba", email = "vjt@openssl.it"},
+]
+# The integration itself has no runtime requirements beyond Home Assistant and
+# pydantic (declared in manifest.json). These are development tools only.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/vjt/ha-estia"
+Repository = "https://github.com/vjt/ha-estia"
+Issues = "https://github.com/vjt/ha-estia/issues"
+
+[project.optional-dependencies]
+dev = [
+    "homeassistant==2026.2.3",
+    "pytest-homeassistant-custom-component==0.13.316",
+    "pydantic>=2.0",
+    "pyright>=1.1",
+    "ruff==0.17.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Nothing to package: the integration ships through HACS, not PyPI.
+[tool.setuptools]
+py-modules = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+timeout = 10
+testpaths = ["tests"]
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+include = ["custom_components/estia/"]
+reportMissingTypeStubs = false
+
+[tool.ruff]
+target-version = "py313"
+line-length = 99
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "A",         # builtins
+    "T20",       # print
+    "SIM",       # simplify
+    "TCH",       # type-checking
+    "RUF",       # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+# HA integration uses `from __future__ import annotations` which makes ruff
+# think all type annotations are type-checking-only. They're not — HomeAssistant,
+# ConfigEntry, etc. are runtime function parameters, and Pydantic resolves
+# model annotations (datetime, time) at runtime.
+"custom_components/**/*.py" = ["TCH001", "TCH002", "TCH003"]
