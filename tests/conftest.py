@@ -28,7 +28,7 @@ from custom_components.estia.const import (
     INITIAL_PREHEAT_RADIUS_KM,
 )
 from custom_components.estia.models import StoredState, TravellerSensors, Wiring
-from custom_components.estia.scheduler import Slot
+from custom_components.estia.scheduler import Profile, Slot
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -42,6 +42,7 @@ CLIMATE = "climate.living_room"
 PRESENCE = "binary_sensor.anyone_home"
 DISTANCE = "sensor.home_alice_distance"
 DIRECTION = "sensor.home_alice_direction_of_travel"
+PROFILE = "all"
 
 
 @pytest.fixture(autouse=True)
@@ -130,7 +131,8 @@ TEST_SLOTS = (
 def make_entry(proximity: tuple[TravellerSensors, ...]) -> MockConfigEntry:
     wiring = Wiring(climate=CLIMATE, presence=PRESENCE, proximity=proximity)
     state = StoredState(
-        slots=TEST_SLOTS,
+        profiles=(Profile(id=PROFILE, name="Every day", slots=TEST_SLOTS),),
+        week=(PROFILE,) * 7,
         schedule_enabled=True,
         preheat_enabled=bool(proximity),
         away_setpoint=INITIAL_AWAY_SETPOINT,
@@ -147,7 +149,7 @@ def make_entry(proximity: tuple[TravellerSensors, ...]) -> MockConfigEntry:
         data=wiring.model_dump(mode="json"),
         options=state.model_dump(mode="json"),
         version=1,
-        minor_version=2,
+        minor_version=3,
     )
 
 

@@ -41,16 +41,25 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
+    async_track_time_change,
 )
 from homeassistant.helpers.start import async_at_started
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import DistanceConverter
 
-from .const import BOOST_DURATION_MIN, DOMAIN, HVAC_ON_SETTLE_SECONDS, Direction, Field
+from .const import (
+    BOOST_DURATION_MIN,
+    DOMAIN,
+    HVAC_ON_SETTLE_SECONDS,
+    Direction,
+    Field,
+    Weekday,
+)
 from .const import Event as EstiaEvent
 from .models import Boost, StoredState, TravellerSensors, Wiring
 from .scheduler import (
     Decision,
+    Profile,
     Slot,
     Snapshot,
     Traveller,
@@ -143,6 +152,11 @@ class EstiaRuntime:
             async_track_state_change_event(self._hass, inputs, self._on_input_change)
         )
         self._unsubs.append(async_at_started(self._hass, self._on_started))
+        # A new day may use another profile even when no slot starts at
+        # midnight: decide again so the sensor reports today's profile.
+        self._unsubs.append(
+            async_track_time_change(self._hass, self._on_midnight, hour=0, minute=0, second=0)
+        )
 
     async def async_stop(self) -> None:
         for unsub in self._unsubs:
@@ -169,7 +183,8 @@ class EstiaRuntime:
         return Snapshot(
             schedule_enabled=self.state.schedule_enabled,
             hvac_off=climate is not None and climate.state == HVACMode.OFF,
-            slots=self.state.slots,
+            profiles=self.state.profiles,
+            week=self.state.week,
             away_setpoint=self.state.away_setpoint,
             away_delay=timedelta(minutes=self.state.away_delay_min),
             preheat_enabled=self.state.preheat_enabled,
@@ -280,6 +295,10 @@ class EstiaRuntime:
         self._hass.async_create_task(self.async_apply(None))
 
     @callback
+    def _on_midnight(self, now: datetime) -> None:
+        self._hass.async_create_task(self.async_apply(None))
+
+    @callback
     def _on_input_change(self, event: Event[EventStateChangedData]) -> None:
         self._hass.async_create_task(self.async_apply(event.context))
 
@@ -309,7 +328,7 @@ class EstiaRuntime:
         holds until the next slot starts (paused, it is kept anyway)."""
         async with self._lock:
             until = (
-                hold_until_after(self.state.slots, dt_util.now())
+                hold_until_after(self.state.profiles, self.state.week, dt_util.now())
                 if self.state.schedule_enabled
                 else None
             )
@@ -462,37 +481,126 @@ class EstiaRuntime:
             translation_placeholders={"slot_id": slot_id},
         )
 
-    async def async_set_slot(self, slot_id: str, start: time, setpoint: float) -> None:
-        """Change a slot. Raises ServiceValidationError on an unknown id or a
-        start time already taken by another slot."""
+    @staticmethod
+    def _profile_index(profiles: tuple[Profile, ...], profile_id: str) -> int:
+        for index, profile in enumerate(profiles):
+            if profile.id == profile_id:
+                return index
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="unknown_profile",
+            translation_placeholders={"profile_id": profile_id},
+        )
 
-        def change(state: StoredState) -> StoredState:
-            slots = list(state.slots)
-            slots[self._slot_index(state.slots, slot_id)] = Slot(
+    def _edit_profile(
+        self, state: StoredState, profile_id: str, edit: Callable[[Profile], Profile]
+    ) -> StoredState:
+        """`state` with `edit` applied to one profile. Raises
+        ServiceValidationError on an unknown profile id."""
+        profiles = list(state.profiles)
+        index = self._profile_index(state.profiles, profile_id)
+        profiles[index] = edit(profiles[index])
+        return state.model_copy(update={"profiles": tuple(profiles)})
+
+    async def async_set_slot(
+        self, profile_id: str, slot_id: str, start: time, setpoint: float
+    ) -> None:
+        """Change a slot of a profile. Raises ServiceValidationError on an
+        unknown profile or slot id, or a start time already taken by another
+        slot of the profile."""
+
+        def edit(profile: Profile) -> Profile:
+            slots = list(profile.slots)
+            slots[self._slot_index(profile.slots, slot_id)] = Slot(
                 id=slot_id, start=start, setpoint=setpoint
             )
-            self._check_free(state.slots, start, slot_id)
-            return state.model_copy(update={"slots": sorted_slots(tuple(slots))})
+            self._check_free(profile.slots, start, slot_id)
+            return profile.model_copy(update={"slots": sorted_slots(tuple(slots))})
 
-        await self._async_mutate(change)
+        await self._async_mutate(lambda state: self._edit_profile(state, profile_id, edit))
 
-    async def async_add_slot(self, start: time, setpoint: float) -> Slot:
-        """Add a slot. Raises ServiceValidationError if `start` is taken."""
+    async def async_add_slot(self, profile_id: str, start: time, setpoint: float) -> Slot:
+        """Add a slot to a profile. Raises ServiceValidationError on an unknown
+        profile or if `start` is taken."""
         slot = Slot(id=uuid.uuid4().hex[:8], start=start, setpoint=setpoint)
 
-        def change(state: StoredState) -> StoredState:
-            self._check_free(state.slots, start, None)
-            return state.model_copy(update={"slots": sorted_slots((*state.slots, slot))})
+        def edit(profile: Profile) -> Profile:
+            self._check_free(profile.slots, start, None)
+            return profile.model_copy(update={"slots": sorted_slots((*profile.slots, slot))})
 
-        await self._async_mutate(change)
+        await self._async_mutate(lambda state: self._edit_profile(state, profile_id, edit))
         return slot
 
-    async def async_remove_slot(self, slot_id: str) -> None:
-        """Remove a slot. Raises ServiceValidationError on an unknown id."""
+    async def async_remove_slot(self, profile_id: str, slot_id: str) -> None:
+        """Remove a slot of a profile. Raises ServiceValidationError on an
+        unknown profile or slot id."""
+
+        def edit(profile: Profile) -> Profile:
+            slots = list(profile.slots)
+            del slots[self._slot_index(profile.slots, slot_id)]
+            return profile.model_copy(update={"slots": tuple(slots)})
+
+        await self._async_mutate(lambda state: self._edit_profile(state, profile_id, edit))
+
+    # -- profiles ----------------------------------------------------------
+
+    async def async_add_profile(self, name: str, copy_from: str) -> Profile:
+        """Add a profile named `name` with a copy of the slots of `copy_from`.
+        Raises ServiceValidationError on an unknown `copy_from`."""
+        new_id = uuid.uuid4().hex[:8]
+        created: list[Profile] = []
 
         def change(state: StoredState) -> StoredState:
-            slots = list(state.slots)
-            del slots[self._slot_index(state.slots, slot_id)]
-            return state.model_copy(update={"slots": tuple(slots)})
+            source = state.profiles[self._profile_index(state.profiles, copy_from)]
+            profile = Profile(
+                id=new_id,
+                name=name,
+                slots=tuple(
+                    Slot(id=uuid.uuid4().hex[:8], start=slot.start, setpoint=slot.setpoint)
+                    for slot in source.slots
+                ),
+            )
+            created.append(profile)
+            return state.model_copy(update={"profiles": (*state.profiles, profile)})
+
+        await self._async_mutate(change)
+        return created[0]
+
+    async def async_rename_profile(self, profile_id: str, name: str) -> None:
+        """Raises ServiceValidationError on an unknown profile id."""
+        await self._async_mutate(
+            lambda state: self._edit_profile(
+                state, profile_id, lambda profile: profile.model_copy(update={"name": name})
+            )
+        )
+
+    async def async_remove_profile(self, profile_id: str) -> None:
+        """Raises ServiceValidationError on an unknown profile id or a profile
+        some weekday uses (which also keeps the last profile: the week always
+        names one)."""
+
+        def change(state: StoredState) -> StoredState:
+            index = self._profile_index(state.profiles, profile_id)
+            if profile_id in state.week:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="profile_in_use",
+                    translation_placeholders={"profile_id": profile_id},
+                )
+            profiles = list(state.profiles)
+            del profiles[index]
+            return state.model_copy(update={"profiles": tuple(profiles)})
+
+        await self._async_mutate(change)
+
+    async def async_assign_day(self, day: Weekday, profile_id: str) -> None:
+        """Make `day` use the profile. Raises ServiceValidationError on an
+        unknown profile id."""
+
+        def change(state: StoredState) -> StoredState:
+            self._profile_index(state.profiles, profile_id)
+            week = list(state.week)
+            week[tuple(Weekday).index(day)] = profile_id
+            return state.model_copy(update={"week": tuple(week)})
 
         await self._async_mutate(change)

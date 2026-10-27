@@ -5,15 +5,18 @@ asks `decide` what to do and `next_wakeup` when to ask again.
 
 Slot start times are local wall-clock times; `now` must be an aware datetime in
 the local time zone, so that `now.time()` and `now.date()` are local too.
+
+A schedule is a set of day profiles (named lists of slots) and a week: the id
+of the profile each weekday uses, Monday first (`date.weekday()`).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from .const import Direction, Mode
+from .const import DAYS_PER_WEEK, Direction, Mode
 
 
 class Slot(BaseModel):
@@ -24,6 +27,38 @@ class Slot(BaseModel):
     id: str
     start: time
     setpoint: float
+
+
+class Profile(BaseModel):
+    """A named day: the slots of the days that use it. Start times are unique."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    name: str
+    slots: tuple[Slot, ...]
+
+    @model_validator(mode="after")
+    def _unique_starts(self) -> Profile:
+        starts = [slot.start for slot in self.slots]
+        if len(set(starts)) != len(starts):
+            raise ValueError(f"profile {self.id} has two slots starting at the same time")
+        return self
+
+
+def check_week(profiles: tuple[Profile, ...], week: tuple[str, ...]) -> None:
+    """Raises ValueError unless there is at least one profile, profile ids are
+    unique, and `week` names an existing profile for each of the 7 weekdays."""
+    if not profiles:
+        raise ValueError("at least one profile is required")
+    ids = [profile.id for profile in profiles]
+    if len(set(ids)) != len(ids):
+        raise ValueError("profile ids must be unique")
+    if len(week) != DAYS_PER_WEEK:
+        raise ValueError(f"the week needs {DAYS_PER_WEEK} profile ids, got {len(week)}")
+    unknown = sorted(set(week) - set(ids))
+    if unknown:
+        raise ValueError(f"the week uses unknown profiles: {', '.join(unknown)}")
 
 
 class Traveller(BaseModel):
@@ -45,7 +80,8 @@ class Snapshot(BaseModel):
 
     schedule_enabled: bool
     hvac_off: bool
-    slots: tuple[Slot, ...]
+    profiles: tuple[Profile, ...]
+    week: tuple[str, ...]
     away_setpoint: float
     away_delay: timedelta
     preheat_enabled: bool
@@ -57,6 +93,11 @@ class Snapshot(BaseModel):
     boost_until: datetime | None
     # The thermostat's max_temp; None while it is unavailable.
     max_setpoint: float | None
+
+    @model_validator(mode="after")
+    def _valid_week(self) -> Snapshot:
+        check_week(self.profiles, self.week)
+        return self
 
 
 class Decision(BaseModel):
@@ -80,28 +121,49 @@ def sorted_slots(slots: tuple[Slot, ...]) -> tuple[Slot, ...]:
     return tuple(sorted(slots, key=lambda slot: slot.start))
 
 
-def active_slot(slots: tuple[Slot, ...], now: datetime) -> Slot | None:
-    """The slot with the latest start not after now; before the first start of
-    the day, the last slot of the day before. None without slots."""
-    ordered = sorted_slots(slots)
-    if not ordered:
-        return None
-    started = [slot for slot in ordered if slot.start <= now.time()]
-    return started[-1] if started else ordered[-1]
+def day_slots(profiles: tuple[Profile, ...], week: tuple[str, ...], day: date) -> tuple[Slot, ...]:
+    """The slots of `day`, in start order: those of the profile its weekday
+    uses. Raises KeyError if `week` names a profile that does not exist."""
+    by_id = {profile.id: profile for profile in profiles}
+    return sorted_slots(by_id[week[day.weekday()]].slots)
 
 
-def hold_until_after(slots: tuple[Slot, ...], now: datetime) -> datetime:
-    """The next slot start strictly after now, today or tomorrow.
+def active_slot(
+    profiles: tuple[Profile, ...], week: tuple[str, ...], now: datetime
+) -> Slot | None:
+    """The slot with the latest start not after now among today's; before
+    today's first start (or on a day without slots), the last slot of the most
+    recent earlier day that has any, up to a week back. None without slots."""
+    today = day_slots(profiles, week, now.date())
+    started = [slot for slot in today if slot.start <= now.time()]
+    if started:
+        return started[-1]
+    for back in range(1, DAYS_PER_WEEK + 1):
+        earlier = day_slots(profiles, week, now.date() - timedelta(days=back))
+        if earlier:
+            return earlier[-1]
+    return None
+
+
+def hold_until_after(
+    profiles: tuple[Profile, ...], week: tuple[str, ...], now: datetime
+) -> datetime:
+    """The next slot start strictly after now, today or on the following days
+    (each with its own profile), up to a week ahead.
 
     Without slots, a day from now (on the minute).
     """
-    starts = [slot.start for slot in sorted_slots(slots)]
-    later = [start for start in starts if start > now.time()]
-    if later:
-        return datetime.combine(now.date(), later[0], tzinfo=now.tzinfo)
-    if starts:
-        return datetime.combine(now.date() + timedelta(days=1), starts[0], tzinfo=now.tzinfo)
+    for ahead in range(DAYS_PER_WEEK + 1):
+        day = now.date() + timedelta(days=ahead)
+        for slot in day_slots(profiles, week, day):
+            if ahead > 0 or slot.start > now.time():
+                return datetime.combine(day, slot.start, tzinfo=now.tzinfo)
     return (now + timedelta(days=1)).replace(second=0, microsecond=0)
+
+
+def has_slots(profiles: tuple[Profile, ...], week: tuple[str, ...]) -> bool:
+    """Whether any day of the week has a slot (profiles no day uses do not count)."""
+    return any(profile.slots for profile in profiles if profile.id in week)
 
 
 def _is_empty(snapshot: Snapshot, now: datetime) -> bool:
@@ -154,7 +216,7 @@ def decide(snapshot: Snapshot, now: datetime) -> Decision:
             mode=Mode.MANUAL, target=None, hold_until=snapshot.hold_until, boost_until=None
         )
 
-    slot = active_slot(snapshot.slots, now)
+    slot = active_slot(snapshot.profiles, snapshot.week, now)
     return Decision(
         mode=Mode.PREHEAT if empty else Mode.HOME,
         target=slot.setpoint if slot is not None else None,
@@ -180,8 +242,8 @@ def next_wakeup(snapshot: Snapshot, now: datetime) -> datetime | None:
         candidates.append(snapshot.boost_until)
     if not snapshot.schedule_enabled:
         return min(candidates) if candidates else None
-    if snapshot.slots:
-        candidates.append(hold_until_after(snapshot.slots, now))
+    if has_slots(snapshot.profiles, snapshot.week):
+        candidates.append(hold_until_after(snapshot.profiles, snapshot.week, now))
     if snapshot.hold_until is not None and snapshot.hold_until > now:
         candidates.append(snapshot.hold_until)
     if snapshot.empty_since is not None:

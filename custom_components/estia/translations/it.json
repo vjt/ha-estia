@@ -92,6 +92,12 @@
     },
     "entry_not_loaded": {
       "message": "{entry_id} non è un programma Estia caricato."
+    },
+    "unknown_profile": {
+      "message": "Nessun profilo con id {profile_id}."
+    },
+    "profile_in_use": {
+      "message": "Il profilo {profile_id} è assegnato a un giorno della settimana. Assegna prima quel giorno a un altro profilo."
     }
   },
   "services": {
@@ -103,13 +109,17 @@
           "name": "Programma",
           "description": "Il programma Estia da modificare."
         },
+        "profile_id": {
+          "name": "Profilo",
+          "description": "Id del profilo, dall'attributo profiles del sensore di modalità."
+        },
         "slot_id": {
           "name": "Fascia",
-          "description": "Id della fascia, dall'attributo slots del sensore di modalità."
+          "description": "Id della fascia, dall'attributo profiles del sensore di modalità."
         },
         "start": {
           "name": "Inizio",
-          "description": "Quando inizia la fascia, ogni giorno."
+          "description": "Quando inizia la fascia, nei giorni che usano il profilo."
         },
         "setpoint": {
           "name": "Temperatura",
@@ -119,15 +129,19 @@
     },
     "add_slot": {
       "name": "Aggiungi fascia",
-      "description": "Aggiunge una fascia giornaliera.",
+      "description": "Aggiunge una fascia a un profilo.",
       "fields": {
         "config_entry_id": {
           "name": "Programma",
           "description": "Il programma Estia da modificare."
         },
+        "profile_id": {
+          "name": "Profilo",
+          "description": "Id del profilo, dall'attributo profiles del sensore di modalità."
+        },
         "start": {
           "name": "Inizio",
-          "description": "Quando inizia la fascia, ogni giorno."
+          "description": "Quando inizia la fascia, nei giorni che usano il profilo."
         },
         "setpoint": {
           "name": "Temperatura",
@@ -137,15 +151,87 @@
     },
     "remove_slot": {
       "name": "Elimina fascia",
-      "description": "Elimina una fascia giornaliera.",
+      "description": "Elimina una fascia da un profilo.",
       "fields": {
         "config_entry_id": {
           "name": "Programma",
           "description": "Il programma Estia da modificare."
         },
+        "profile_id": {
+          "name": "Profilo",
+          "description": "Id del profilo, dall'attributo profiles del sensore di modalità."
+        },
         "slot_id": {
           "name": "Fascia",
-          "description": "Id della fascia, dall'attributo slots del sensore di modalità."
+          "description": "Id della fascia, dall'attributo profiles del sensore di modalità."
+        }
+      }
+    },
+    "add_profile": {
+      "name": "Aggiungi profilo",
+      "description": "Aggiunge un profilo giornaliero con una copia delle fasce di un profilo esistente.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "name": {
+          "name": "Nome",
+          "description": "Nome del nuovo profilo."
+        },
+        "copy_from": {
+          "name": "Copia da",
+          "description": "Id del profilo di cui copiare le fasce."
+        }
+      }
+    },
+    "rename_profile": {
+      "name": "Rinomina profilo",
+      "description": "Cambia il nome di un profilo giornaliero.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "profile_id": {
+          "name": "Profilo",
+          "description": "Id del profilo, dall'attributo profiles del sensore di modalità."
+        },
+        "name": {
+          "name": "Nome",
+          "description": "Il nuovo nome."
+        }
+      }
+    },
+    "remove_profile": {
+      "name": "Elimina profilo",
+      "description": "Elimina un profilo giornaliero che nessun giorno usa.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "profile_id": {
+          "name": "Profilo",
+          "description": "Id del profilo, dall'attributo profiles del sensore di modalità."
+        }
+      }
+    },
+    "assign_day": {
+      "name": "Assegna giorno",
+      "description": "Fa usare un profilo a un giorno della settimana.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Programma",
+          "description": "Il programma Estia da modificare."
+        },
+        "profile_id": {
+          "name": "Profilo",
+          "description": "Id del profilo, dall'attributo profiles del sensore di modalità."
+        },
+        "day": {
+          "name": "Giorno",
+          "description": "Il giorno della settimana."
         }
       }
     },
@@ -157,6 +243,19 @@
           "name": "Programma",
           "description": "Il programma Estia."
         }
+      }
+    }
+  },
+  "selector": {
+    "weekday": {
+      "options": {
+        "monday": "Lunedì",
+        "tuesday": "Martedì",
+        "wednesday": "Mercoledì",
+        "thursday": "Giovedì",
+        "friday": "Venerdì",
+        "saturday": "Sabato",
+        "sunday": "Domenica"
       }
     }
   }

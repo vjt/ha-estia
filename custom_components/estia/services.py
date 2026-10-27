@@ -10,15 +10,18 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, SETPOINT_MAX, SETPOINT_MIN, Field, Service
+from .const import DOMAIN, SETPOINT_MAX, SETPOINT_MIN, Field, Service, Weekday
 from .runtime import EstiaConfigEntry, EstiaRuntime
 
 _ENTRY = {vol.Required(Field.CONFIG_ENTRY_ID.value): cv.string}
 _SETPOINT = vol.All(vol.Coerce(float), vol.Range(min=SETPOINT_MIN, max=SETPOINT_MAX))
 
+_PROFILE = {vol.Required(Field.PROFILE_ID.value): cv.string}
+
 SET_SLOT_SCHEMA = vol.Schema(
     {
         **_ENTRY,
+        **_PROFILE,
         vol.Required(Field.SLOT_ID.value): cv.string,
         vol.Required(Field.START.value): cv.time,
         vol.Required(Field.SETPOINT.value): _SETPOINT,
@@ -27,11 +30,28 @@ SET_SLOT_SCHEMA = vol.Schema(
 ADD_SLOT_SCHEMA = vol.Schema(
     {
         **_ENTRY,
+        **_PROFILE,
         vol.Required(Field.START.value): cv.time,
         vol.Required(Field.SETPOINT.value): _SETPOINT,
     }
 )
-REMOVE_SLOT_SCHEMA = vol.Schema({**_ENTRY, vol.Required(Field.SLOT_ID.value): cv.string})
+REMOVE_SLOT_SCHEMA = vol.Schema(
+    {**_ENTRY, **_PROFILE, vol.Required(Field.SLOT_ID.value): cv.string}
+)
+_NAME = vol.All(cv.string, vol.Strip, vol.Length(min=1))
+
+ADD_PROFILE_SCHEMA = vol.Schema(
+    {
+        **_ENTRY,
+        vol.Required(Field.NAME.value): _NAME,
+        vol.Required(Field.COPY_FROM.value): cv.string,
+    }
+)
+RENAME_PROFILE_SCHEMA = vol.Schema({**_ENTRY, **_PROFILE, vol.Required(Field.NAME.value): _NAME})
+REMOVE_PROFILE_SCHEMA = vol.Schema({**_ENTRY, **_PROFILE})
+ASSIGN_DAY_SCHEMA = vol.Schema(
+    {**_ENTRY, **_PROFILE, vol.Required(Field.DAY.value): vol.Coerce(Weekday)}
+)
 RESUME_SCHEMA = vol.Schema(_ENTRY)
 
 
@@ -51,16 +71,36 @@ def _runtime(call: ServiceCall) -> EstiaRuntime:
 
 async def _set_slot(call: ServiceCall) -> None:
     start: time = call.data[Field.START]
-    await _runtime(call).async_set_slot(call.data[Field.SLOT_ID], start, call.data[Field.SETPOINT])
+    await _runtime(call).async_set_slot(
+        call.data[Field.PROFILE_ID], call.data[Field.SLOT_ID], start, call.data[Field.SETPOINT]
+    )
 
 
 async def _add_slot(call: ServiceCall) -> None:
     start: time = call.data[Field.START]
-    await _runtime(call).async_add_slot(start, call.data[Field.SETPOINT])
+    await _runtime(call).async_add_slot(
+        call.data[Field.PROFILE_ID], start, call.data[Field.SETPOINT]
+    )
 
 
 async def _remove_slot(call: ServiceCall) -> None:
-    await _runtime(call).async_remove_slot(call.data[Field.SLOT_ID])
+    await _runtime(call).async_remove_slot(call.data[Field.PROFILE_ID], call.data[Field.SLOT_ID])
+
+
+async def _add_profile(call: ServiceCall) -> None:
+    await _runtime(call).async_add_profile(call.data[Field.NAME], call.data[Field.COPY_FROM])
+
+
+async def _rename_profile(call: ServiceCall) -> None:
+    await _runtime(call).async_rename_profile(call.data[Field.PROFILE_ID], call.data[Field.NAME])
+
+
+async def _remove_profile(call: ServiceCall) -> None:
+    await _runtime(call).async_remove_profile(call.data[Field.PROFILE_ID])
+
+
+async def _assign_day(call: ServiceCall) -> None:
+    await _runtime(call).async_assign_day(call.data[Field.DAY], call.data[Field.PROFILE_ID])
 
 
 async def _resume(call: ServiceCall) -> None:
@@ -72,4 +112,12 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, Service.SET_SLOT, _set_slot, SET_SLOT_SCHEMA)
     hass.services.async_register(DOMAIN, Service.ADD_SLOT, _add_slot, ADD_SLOT_SCHEMA)
     hass.services.async_register(DOMAIN, Service.REMOVE_SLOT, _remove_slot, REMOVE_SLOT_SCHEMA)
+    hass.services.async_register(DOMAIN, Service.ADD_PROFILE, _add_profile, ADD_PROFILE_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, Service.RENAME_PROFILE, _rename_profile, RENAME_PROFILE_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, Service.REMOVE_PROFILE, _remove_profile, REMOVE_PROFILE_SCHEMA
+    )
+    hass.services.async_register(DOMAIN, Service.ASSIGN_DAY, _assign_day, ASSIGN_DAY_SCHEMA)
     hass.services.async_register(DOMAIN, Service.RESUME, _resume, RESUME_SCHEMA)

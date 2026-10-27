@@ -6,17 +6,23 @@ A daily heating schedule for Home Assistant that drives any `climate` entity,
 with a Lovelace card to edit it. Named after Estia (Hestia), the Greek goddess
 of the hearth.
 
-- **Daily slots**: each slot has a start time and a setpoint, the same every
-  day. The active slot is the one with the latest start not after now; before
-  the first start of the day, the last slot of the day before is still running.
-  Add, move and delete slots from the card.
+- **Daily slots**: each slot has a start time and a setpoint. The active slot
+  is the one with the latest start not after now; before the first start of
+  the day (or on a day without slots), the last slot of the most recent
+  earlier day that has any is still running. Add, move and delete slots from
+  the card.
+- **Day profiles**: slots live in named profiles (for example *Weekdays* and
+  *Weekend*), and each weekday uses one profile. A new schedule starts with a
+  single profile, *Every day*, used all week. A Friday evening slot carries
+  over into Saturday until Saturday's first slot starts.
 - **Away**: when the presence sensor has been off for the away delay, the away
   setpoint wins over every slot.
 - **Preheat**: when someone tracked by the Proximity integration is closer than
   the preheat radius **and** heading home, the slots apply even with the house
   empty. Being near but stationary (a day in town) does not count.
 - **Manual hold**: a setpoint changed by hand (the thermostat's own buttons, or
-  the Home Assistant UI) is kept until the next slot starts. The house going
+  the Home Assistant UI) is kept until the next slot starts, today or on the
+  following days. The house going
   empty overrides and clears it. *Return to schedule* drops it.
 - **Schedule switch**: off pauses the schedule (mode *Paused*): Estia leaves
   the thermostat alone, so the temperature is whatever you set by hand, and
@@ -59,7 +65,7 @@ The setup form asks for:
 | Thermostat | The `climate` entity to drive. One schedule per thermostat. |
 | Presence sensor | A `binary_sensor` that is on while someone is home (e.g. a group of `person` entities, or your alarm's occupancy sensor). |
 | Proximity distance sensors | Optional, one per person: the *distance* sensors created by the [Proximity](https://www.home-assistant.io/integrations/proximity/) integration. Their *direction of travel* sensors are found automatically. Leave empty to disable preheat. |
-| Number of daily slots | Slots to start with, spread evenly over the day at 20 °C. Change them from the card afterwards. |
+| Number of daily slots | Slots to start with in the *Every day* profile, spread evenly over the day at 20 °C. Change them, and add profiles, from the card afterwards. |
 
 The presence and proximity sensors can be changed later with *Reconfigure*.
 
@@ -67,7 +73,7 @@ The presence and proximity sensors can be changed later with *Reconfigure*.
 
 | Entity | |
 |---|---|
-| `sensor.<name>_mode` | `home`, `away`, `preheat`, `manual`, `boost`, `paused` (manual with no expiry) or `off`. Its attributes carry the slots, the active slot, the hold expiry and the target: this is what the card reads. |
+| `sensor.<name>_mode` | `home`, `away`, `preheat`, `manual`, `boost`, `paused` (manual with no expiry) or `off`. Its attributes carry the profiles (each with its slots, sorted by start), the week, today's profile, the active slot, the hold expiry and the target: this is what the card reads. |
 | `switch.<name>_schedule` | Schedule on/off. |
 | `switch.<name>_boost` | Boost on/off (ends by itself after two hours). |
 | `switch.<name>_preheat_on_the_way_home` | Preheat on/off. |
@@ -86,12 +92,17 @@ All take `config_entry_id` (the schedule; the mode sensor's
 
 | Service | Fields | |
 |---|---|---|
-| `estia.set_slot` | `slot_id`, `start`, `setpoint` | Change a slot. |
-| `estia.add_slot` | `start`, `setpoint` | Add a slot. |
-| `estia.remove_slot` | `slot_id` | Remove a slot. |
+| `estia.set_slot` | `profile_id`, `slot_id`, `start`, `setpoint` | Change a slot. |
+| `estia.add_slot` | `profile_id`, `start`, `setpoint` | Add a slot. |
+| `estia.remove_slot` | `profile_id`, `slot_id` | Remove a slot. |
+| `estia.add_profile` | `name`, `copy_from` | Add a profile with a copy of the slots of the profile `copy_from`. |
+| `estia.rename_profile` | `profile_id`, `name` | Rename a profile. |
+| `estia.remove_profile` | `profile_id` | Remove a profile. Refused while a weekday uses it. |
+| `estia.assign_day` | `day` (`monday` … `sunday`), `profile_id` | Make a weekday use a profile. |
 | `estia.resume` | | Drop the manual hold and apply the schedule now. |
 
-Two slots cannot start at the same time.
+Two slots of the same profile cannot start at the same time. Profile ids come
+from the mode sensor's `profiles` attribute.
 
 ### Events
 
@@ -124,9 +135,15 @@ entity: sensor.heating_mode
   the others. Scheduled off keeps the current temperature with no end.
 - The header shows the mode and, while a manual hold or a boost runs, until
   when.
-- **Schedule**: the 24 h bar, one segment per slot coloured by setpoint, with
-  a marker for now and the active slot outlined, and a summary of the away
-  and preheat settings. **Edit** unlocks it:
+- **Schedule**: a row of profile chips (today's profile marked with a dot) to
+  pick the profile shown, a row of the seven weekdays with the profile each
+  uses, the 24 h bar of the chosen profile, one segment per slot coloured by
+  setpoint, with a marker for now and the active slot outlined when the
+  profile is today's, and a summary of the away and preheat settings. **Edit**
+  unlocks it:
+  - tap a **weekday** to give it the profile on display;
+  - **add profile** (a copy of the one on display), **rename** and **delete**
+    a profile; delete is disabled while a weekday uses it;
   - **drag** the white line at a slot's start to move it (15-minute steps);
   - **tap** a segment to set its start and setpoint (type it, drag the
     slider, scroll, or − / +);

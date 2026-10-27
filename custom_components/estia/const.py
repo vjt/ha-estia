@@ -29,6 +29,21 @@ class Direction(StrEnum):
     TOWARDS = "towards"
 
 
+class Weekday(StrEnum):
+    """Days of the week in `date.weekday()` order, Monday first."""
+
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"
+
+
+DAYS_PER_WEEK: Final = len(Weekday)
+
+
 class Event(StrEnum):
     """Events fired on the bus; notifications are left to the user's automations."""
 
@@ -41,6 +56,10 @@ class Service(StrEnum):
     SET_SLOT = "set_slot"
     ADD_SLOT = "add_slot"
     REMOVE_SLOT = "remove_slot"
+    ADD_PROFILE = "add_profile"
+    RENAME_PROFILE = "rename_profile"
+    REMOVE_PROFILE = "remove_profile"
+    ASSIGN_DAY = "assign_day"
     RESUME = "resume"
 
 
@@ -61,7 +80,9 @@ class EntityKey(StrEnum):
 class Attr(StrEnum):
     """Attributes of the mode sensor: the card's data source."""
 
-    SLOTS = "slots"
+    PROFILES = "profiles"
+    WEEK = "week"
+    TODAY_PROFILE = "today_profile"
     ACTIVE_SLOT = "active_slot"
     HOLD_UNTIL = "hold_until"
     BOOST_UNTIL = "boost_until"
@@ -80,6 +101,10 @@ class Field(StrEnum):
 
     CONFIG_ENTRY_ID = "config_entry_id"
     SLOT_ID = "slot_id"
+    PROFILE_ID = "profile_id"
+    COPY_FROM = "copy_from"
+    NAME = "name"
+    DAY = "day"
     START = "start"
     SETPOINT = "setpoint"
     CLIMATE = "climate"
@@ -104,6 +129,9 @@ PREHEAT_RADIUS_MAX_KM: Final = 100.0
 # Initial values for a new entry (genuine configuration, changed from the UI).
 INITIAL_SLOT_COUNT: Final = 3
 INITIAL_SLOT_SETPOINT: Final = 20.0
+INITIAL_PROFILE_ID: Final = "default"
+# Not translated: a config flow has no translation lookup for its own data.
+INITIAL_PROFILE_NAME: Final = "Every day"
 INITIAL_AWAY_SETPOINT: Final = 16.0
 INITIAL_AWAY_DELAY_MIN: Final = 10
 INITIAL_PREHEAT_RADIUS_KM: Final = 20.0

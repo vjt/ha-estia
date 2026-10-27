@@ -6,10 +6,12 @@ from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+from pydantic import ValidationError
 
 from custom_components.estia.const import Direction, Mode
 from custom_components.estia.scheduler import (
     Decision,
+    Profile,
     Slot,
     Snapshot,
     Traveller,
@@ -38,11 +40,16 @@ FAR_TOWARDS = Traveller(distance_m=50_000.0, direction=Direction.TOWARDS)
 UNKNOWN = Traveller(distance_m=None, direction=None)
 
 
+def every_day(slots: tuple[Slot, ...]) -> tuple[tuple[Profile, ...], tuple[str, ...]]:
+    """One profile used all week: the schedule before day profiles."""
+    return (Profile(id="all", name="Every day", slots=slots),), ("all",) * 7
+
+
 def snapshot(
     *,
     schedule_enabled: bool = True,
     hvac_off: bool = False,
-    slots: tuple[Slot, ...] = SLOTS,
+    plan: tuple[tuple[Profile, ...], tuple[str, ...]] = every_day(SLOTS),
     empty_since: datetime | None = None,
     preheat_enabled: bool = True,
     travellers: tuple[Traveller, ...] = (),
@@ -53,7 +60,8 @@ def snapshot(
     return Snapshot(
         schedule_enabled=schedule_enabled,
         hvac_off=hvac_off,
-        slots=slots,
+        profiles=plan[0],
+        week=plan[1],
         away_setpoint=15.5,
         away_delay=timedelta(minutes=10),
         preheat_enabled=preheat_enabled,
@@ -81,16 +89,16 @@ def snapshot(
     ],
 )
 def test_active_slot(now: datetime, expected: Slot) -> None:
-    assert active_slot(SLOTS, now) == expected
+    assert active_slot(*every_day(SLOTS), now) == expected
 
 
 def test_active_slot_single_slot_applies_all_day() -> None:
-    assert active_slot((DAY,), at(3, 0)) == DAY
-    assert active_slot((DAY,), at(12, 0)) == DAY
+    assert active_slot(*every_day((DAY,)), at(3, 0)) == DAY
+    assert active_slot(*every_day((DAY,)), at(12, 0)) == DAY
 
 
 def test_active_slot_none_without_slots() -> None:
-    assert active_slot((), at(12, 0)) is None
+    assert active_slot(*every_day(()), at(12, 0)) is None
 
 
 @pytest.mark.parametrize(
@@ -104,7 +112,7 @@ def test_active_slot_none_without_slots() -> None:
         ),
         # No slots: nothing to push.
         (
-            snapshot(slots=()),
+            snapshot(plan=every_day(())),
             at(10, 0),
             Decision(mode=Mode.HOME, target=None, hold_until=None, boost_until=None),
         ),
@@ -270,7 +278,7 @@ def test_decide_boost(snap: Snapshot, now: datetime, expected: Decision) -> None
     ],
 )
 def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: datetime) -> None:
-    assert hold_until_after(slots, now) == expected
+    assert hold_until_after(*every_day(slots), now) == expected
 
 
 @pytest.mark.parametrize(
@@ -288,7 +296,7 @@ def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: date
         # Already away: the delay is no longer a wakeup.
         (snapshot(empty_since=at(9, 0)), at(10, 0), at(17, 0)),
         # Nothing scheduled at all.
-        (snapshot(slots=()), at(10, 0), None),
+        (snapshot(plan=every_day(())), at(10, 0), None),
         # The boost ends before the next start.
         (snapshot(boost_until=at(12, 0)), at(10, 0), at(12, 0)),
         # Paused: only the end of a boost.
@@ -300,3 +308,146 @@ def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: date
 )
 def test_next_wakeup(snap: Snapshot, now: datetime, expected: datetime | None) -> None:
     assert next_wakeup(snap, now) == expected
+
+
+# -- day profiles -----------------------------------------------------------
+# 2026-10-26 is a Monday: day=30 is Friday, day=31 Saturday, 2026-11-01 Sunday.
+
+LATE_RISE = Slot(id="e", start=time(8, 30), setpoint=22.0)
+LATE_NIGHT = Slot(id="f", start=time(23, 0), setpoint=16.0)
+WEEKDAYS = Profile(id="wd", name="Weekdays", slots=SLOTS)
+WEEKEND = Profile(id="we", name="Weekend", slots=(LATE_NIGHT, LATE_RISE))
+OFF_DAY = Profile(id="off", name="Off", slots=())
+WORK_WEEK = ("wd", "wd", "wd", "wd", "wd", "we", "we")
+FRIDAY, SATURDAY = 30, 31
+SUNDAY = datetime(2026, 11, 1, 10, 0, tzinfo=TZ)
+
+
+def week_plan(
+    profiles: tuple[Profile, ...], week: tuple[str, ...]
+) -> tuple[tuple[Profile, ...], tuple[str, ...]]:
+    return profiles, week
+
+
+WORKING = week_plan((WEEKDAYS, WEEKEND), WORK_WEEK)
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        # Weekday profile on a weekday, weekend profile on a weekend.
+        (at(10, 0, day=FRIDAY), DAY),
+        (at(10, 0, day=FRIDAY - 4), DAY),
+        (at(10, 0, day=SATURDAY), LATE_RISE),
+        (SUNDAY, LATE_RISE),
+        # Saturday before its first start: Friday's last slot carries over.
+        (at(0, 0, day=SATURDAY), NIGHT),
+        (at(8, 29, 59, day=SATURDAY), NIGHT),
+        (at(8, 30, day=SATURDAY), LATE_RISE),
+        # Saturday's last slot carries into Sunday before 08:30.
+        (at(23, 30, day=SATURDAY), LATE_NIGHT),
+        (SUNDAY.replace(hour=7), LATE_NIGHT),
+        # Monday before 06:30: Sunday's last slot.
+        (datetime(2026, 11, 2, 6, 0, tzinfo=TZ), LATE_NIGHT),
+    ],
+)
+def test_active_slot_by_weekday(now: datetime, expected: Slot) -> None:
+    assert active_slot(*WORKING, now) == expected
+
+
+def test_active_slot_empty_day_carries_over_the_previous_day() -> None:
+    plan = week_plan((WEEKDAYS, OFF_DAY), ("wd", "wd", "wd", "wd", "wd", "off", "off"))
+    # Saturday and Sunday have no slots: Friday's last one holds all weekend...
+    assert active_slot(*plan, at(12, 0, day=SATURDAY)) == NIGHT
+    assert active_slot(*plan, SUNDAY) == NIGHT
+    # ... until Monday's first start.
+    assert active_slot(*plan, datetime(2026, 11, 2, 6, 0, tzinfo=TZ)) == NIGHT
+    assert active_slot(*plan, datetime(2026, 11, 2, 6, 30, tzinfo=TZ)) == MORNING
+
+
+def test_active_slot_only_one_day_has_slots() -> None:
+    # The search back covers a whole week: the same weekday last week.
+    plan = week_plan((WEEKDAYS, OFF_DAY), ("off", "off", "off", "off", "wd", "off", "off"))
+    assert active_slot(*plan, at(3, 0, day=FRIDAY)) == NIGHT
+    assert active_slot(*plan, at(12, 0)) == NIGHT  # Monday
+
+
+def test_active_slot_none_when_every_profile_is_empty() -> None:
+    plan = week_plan((OFF_DAY, WEEKDAYS), ("off",) * 7)  # WEEKDAYS unused
+    assert active_slot(*plan, at(12, 0)) is None
+
+
+@pytest.mark.parametrize(
+    ("now", "expected"),
+    [
+        # Friday evening: the next start is Saturday's first, not Monday's.
+        (at(23, 0, day=FRIDAY), at(8, 30, day=SATURDAY)),
+        (at(22, 30, day=FRIDAY), at(8, 30, day=SATURDAY)),
+        (at(22, 29, day=FRIDAY), at(22, 30, day=FRIDAY)),
+        # Saturday: the weekend profile's starts, then Sunday's first.
+        (at(8, 30, day=SATURDAY), at(23, 0, day=SATURDAY)),
+        (at(23, 0, day=SATURDAY), datetime(2026, 11, 1, 8, 30, tzinfo=TZ)),
+        # Sunday night crosses into the weekday profile.
+        (SUNDAY.replace(hour=23, minute=30), datetime(2026, 11, 2, 6, 30, tzinfo=TZ)),
+    ],
+)
+def test_hold_until_after_crosses_profiles(now: datetime, expected: datetime) -> None:
+    assert hold_until_after(*WORKING, now) == expected
+
+
+def test_hold_until_after_skips_empty_days() -> None:
+    plan = week_plan((WEEKDAYS, OFF_DAY), ("wd", "wd", "wd", "wd", "wd", "off", "off"))
+    assert hold_until_after(*plan, at(23, 0, day=FRIDAY)) == datetime(
+        2026, 11, 2, 6, 30, tzinfo=TZ
+    )
+
+
+def test_hold_until_after_only_slots_are_today_and_already_started() -> None:
+    plan = week_plan((WEEKDAYS, OFF_DAY), ("off", "off", "off", "off", "wd", "off", "off"))
+    # Friday 23:00: the next start is next Friday's first.
+    assert hold_until_after(*plan, at(23, 0, day=FRIDAY)) == datetime(
+        2026, 11, 6, 6, 30, tzinfo=TZ
+    )
+
+
+def test_hold_until_after_all_profiles_empty() -> None:
+    plan = week_plan((OFF_DAY,), ("off",) * 7)
+    assert hold_until_after(*plan, at(10, 15, 42)) == at(10, 15, day=27)
+
+
+def test_decide_follows_the_day_profile() -> None:
+    saturday = decide(snapshot(plan=WORKING), at(10, 0, day=SATURDAY))
+    assert saturday == Decision(mode=Mode.HOME, target=22.0, hold_until=None, boost_until=None)
+    friday = decide(snapshot(plan=WORKING), at(10, 0, day=FRIDAY))
+    assert friday == Decision(mode=Mode.HOME, target=18.0, hold_until=None, boost_until=None)
+
+
+def test_next_wakeup_crosses_into_the_next_profile() -> None:
+    assert next_wakeup(snapshot(plan=WORKING), at(23, 0, day=FRIDAY)) == at(8, 30, day=SATURDAY)
+
+
+def test_next_wakeup_none_when_every_profile_is_empty() -> None:
+    assert next_wakeup(snapshot(plan=week_plan((OFF_DAY,), ("off",) * 7)), at(10, 0)) is None
+
+
+def test_profile_rejects_two_slots_at_the_same_time() -> None:
+    twin = Slot(id="z", start=MORNING.start, setpoint=19.0)
+    with pytest.raises(ValidationError, match="same time"):
+        Profile(id="p", name="P", slots=(MORNING, twin))
+
+
+@pytest.mark.parametrize(
+    ("profiles", "week", "message"),
+    [
+        ((), ("wd",) * 7, "at least one profile"),
+        ((WEEKDAYS, WEEKDAYS), ("wd",) * 7, "unique"),
+        ((WEEKDAYS,), ("wd",) * 6, "7 profile ids"),
+        ((WEEKDAYS,), ("wd",) * 8, "7 profile ids"),
+        ((WEEKDAYS,), ("wd",) * 6 + ("gone",), "gone"),
+    ],
+)
+def test_snapshot_rejects_an_inconsistent_week(
+    profiles: tuple[Profile, ...], week: tuple[str, ...], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        snapshot(plan=(profiles, week))

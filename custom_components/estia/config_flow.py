@@ -30,17 +30,20 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    DAYS_PER_WEEK,
     DOMAIN,
     INITIAL_AWAY_DELAY_MIN,
     INITIAL_AWAY_SETPOINT,
     INITIAL_PREHEAT_RADIUS_KM,
+    INITIAL_PROFILE_ID,
+    INITIAL_PROFILE_NAME,
     INITIAL_SLOT_COUNT,
     INITIAL_SLOT_SETPOINT,
     Field,
 )
 from .models import StoredState, Wiring
 from .proximity import ProximityPairError, resolve_proximity
-from .scheduler import Slot
+from .scheduler import Profile, Slot
 
 DEFAULT_NAME = "Heating"
 MAX_INITIAL_SLOTS = 24
@@ -80,7 +83,8 @@ def _wiring_schema(defaults: Mapping[str, Any]) -> dict[vol.Marker, Any]:
 class EstiaConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
     # 1.2: options gained boost (see async_migrate_entry).
-    MINOR_VERSION = 2
+    # 1.3: slots became day profiles and a week (see async_migrate_entry).
+    MINOR_VERSION = 3
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -98,7 +102,14 @@ class EstiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     proximity=proximity,
                 )
                 state = StoredState(
-                    slots=initial_slots(int(user_input[Field.SLOT_COUNT])),
+                    profiles=(
+                        Profile(
+                            id=INITIAL_PROFILE_ID,
+                            name=INITIAL_PROFILE_NAME,
+                            slots=initial_slots(int(user_input[Field.SLOT_COUNT])),
+                        ),
+                    ),
+                    week=(INITIAL_PROFILE_ID,) * DAYS_PER_WEEK,
                     schedule_enabled=True,
                     preheat_enabled=bool(proximity),
                     away_setpoint=INITIAL_AWAY_SETPOINT,

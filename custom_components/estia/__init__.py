@@ -9,7 +9,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .card import SchedulePanel, async_register_card, card_digest, schedule_device
-from .const import DOMAIN
+from .const import DAYS_PER_WEEK, DOMAIN, INITIAL_PROFILE_ID, INITIAL_PROFILE_NAME
 from .models import Wiring
 from .runtime import EstiaConfigEntry, EstiaRuntime
 from .services import async_register_services
@@ -32,14 +32,26 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: EstiaConfigEntry) -> bool:
-    """1.1 → 1.2: no boost running. Returns False for a version from the
-    future, which HA reports as a failed migration."""
+    """1.1 → 1.2: no boost running. 1.2 → 1.3: the slots become one profile
+    used every day. Returns False for a version from the future, which HA
+    reports as a failed migration."""
     if entry.version > 1:
         return False
     if entry.minor_version < 2:
         hass.config_entries.async_update_entry(
             entry, options={**entry.options, "boost": None}, minor_version=2
         )
+    if entry.minor_version < 3:
+        options = {key: value for key, value in entry.options.items() if key != "slots"}
+        options["profiles"] = [
+            {
+                "id": INITIAL_PROFILE_ID,
+                "name": INITIAL_PROFILE_NAME,
+                "slots": entry.options["slots"],
+            }
+        ]
+        options["week"] = [INITIAL_PROFILE_ID] * DAYS_PER_WEEK
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
     return True
 
 

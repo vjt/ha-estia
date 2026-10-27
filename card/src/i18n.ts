@@ -40,6 +40,16 @@ interface Strings {
   noSlots: string;
   unavailable: string;
   full: string;
+  profiles: string;
+  days: string;
+  addProfile: string;
+  renameProfile: string;
+  deleteProfile: string;
+  profileInUse: string;
+  profileName: string;
+  save: string;
+  cancel: string;
+  today: string;
 }
 
 const EN: Strings = {
@@ -98,6 +108,16 @@ const EN: Strings = {
   noSlots: "No slots: add one with +",
   unavailable: "Schedule unavailable",
   full: "No free start time left",
+  profiles: "Profile",
+  days: "Days",
+  addProfile: "Add profile",
+  renameProfile: "Rename",
+  deleteProfile: "Delete profile",
+  profileInUse: "Assign its days to another profile first",
+  profileName: "Profile name",
+  save: "Save",
+  cancel: "Cancel",
+  today: "today",
 };
 
 const IT: Strings = {
@@ -156,6 +176,16 @@ const IT: Strings = {
   noSlots: "Nessuna fascia: aggiungine una con +",
   unavailable: "Programma non disponibile",
   full: "Nessun orario libero",
+  profiles: "Profilo",
+  days: "Giorni",
+  addProfile: "Aggiungi profilo",
+  renameProfile: "Rinomina",
+  deleteProfile: "Elimina profilo",
+  profileInUse: "Assegna prima i suoi giorni a un altro profilo",
+  profileName: "Nome del profilo",
+  save: "Salva",
+  cancel: "Annulla",
+  today: "oggi",
 };
 
 export function strings(language: string): Strings {

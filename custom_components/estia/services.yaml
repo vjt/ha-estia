@@ -5,6 +5,11 @@ set_slot:
       selector:
         config_entry:
           integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
     slot_id:
       required: true
       example: "slot1"
@@ -33,6 +38,11 @@ add_slot:
       selector:
         config_entry:
           integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
     start:
       required: true
       example: "12:00"
@@ -56,11 +66,92 @@ remove_slot:
       selector:
         config_entry:
           integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
     slot_id:
       required: true
       example: "slot1"
       selector:
         text:
+
+add_profile:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    name:
+      required: true
+      example: "Weekend"
+      selector:
+        text:
+    copy_from:
+      required: true
+      example: "default"
+      selector:
+        text:
+
+rename_profile:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
+    name:
+      required: true
+      example: "Weekend"
+      selector:
+        text:
+
+remove_profile:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
+
+assign_day:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
+    day:
+      required: true
+      example: "saturday"
+      selector:
+        select:
+          translation_key: weekday
+          options:
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday
 
 resume:
   fields:
