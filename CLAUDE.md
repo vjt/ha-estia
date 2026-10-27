@@ -36,6 +36,15 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   button (resume, all off). No per-slot entities.
 - **Services** (`estia.set_slot`, `add_slot`, `remove_slot`, `resume`)
   take `config_entry_id`; the card calls them.
+- **Panel** (`card.py` `SchedulePanel`): one sidebar item per entry, titled
+  after the device's user name, else the entry title; shows HA's native
+  thermostat card (more-info hidden via adopted stylesheet), the card, and
+  `estia-history` (own SVG chart; heating bands are an *estimate*: the tado
+  X over Matter never reports `hvac_action`). Native cards come from
+  `window.loadCardHelpers`, which only exists after Lovelace code loads:
+  `native.ts` loads it through `partial-panel-resolver`.
+- **Brand icon**: `brand/icon.svg` → PNGs with `rsvg-convert` (HA 2026.3+
+  serves them from the integration).
 - **Events**: `estia_mode_changed`, `estia_off`, `estia_resumed`.
   Notifications are the user's automations (README example).
 - **Card**: Lit + TypeScript sources in `card/src/` (repo root, so they
@@ -57,10 +66,19 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
 - **Away clears the hold** (ruling; the YAML resumed it on return).
 - **hvac off → mode Off, no setpoint pushed**; hvac back on → apply
   now (ruling; the YAML kept pushing).
-- **Schedule switch off → mode Paused** (ruling; the YAML froze the
+- **Schedule switch off → mode `paused`** (ruling; the YAML froze the
   last mode), setpoint left alone. Back on → hvac heat if off (wait
   ≤30 s for a numeric setpoint), drop the hold, apply, fire resumed.
-- All off → schedule off + hvac off, fire off.
+- All off → schedule off + hvac off + boost off, fire off.
+- **Boost** (vjt 2026-10-27): thermostat `max_temp` for 120 min, wins over
+  away/paused/hold (not over hvac off); expiry or switching it off restores
+  what was before (`Boost.then_off` / `then_setpoint`); a manual dial
+  change, Scheduled or All off end it without restoring.
+- **Card actions** Scheduled / Boost / All off are one choice; Scheduled off
+  = mode `paused`, labelled "Manual (no expiry)". Settings are read-only
+  until *Edit* (no listeners, no touch capture outside edit mode).
+- **Multiple thermostats**: one entry each, nothing shared, one sidebar
+  item each (README). Not built further until there is a second one.
 - Our own `set_temperature` calls carry a child `Context`
   (`parent_id` set), so their echo is never taken as manual.
 
@@ -164,11 +182,20 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
 - Use production code in tests — never hardcode expected strings.
 - Never weaken production code to make tests pass.
 
+### Deploy (vjt's HA, authorized 2026-10-26)
+- `tar -C custom_components --exclude=__pycache__ -cf - estia | ssh root@homeassistant -p 22222 "tar -C /mnt/data/supervisor/homeassistant/custom_components -xf - && ha core restart"`,
+  then poll `http://homeassistant:8123/api/` (token in `~/code/ha/ha-config/.env`).
+- Gate on `./scripts/check.sh` with `set -o pipefail`: piping it into
+  `tail` hides a failure.
+- Device lookups: `dr.async_entries_for_config_entry`, never
+  `async_get_device` (deprecated in HA 2026.9; dev venv is 2026.2.3).
+
 ### Public Repo
 - Neutral, professional register in code, commits, README, issues.
   Commit messages in English, Conventional Commits.
-- `ha-config` is read-only from here; never touch the live HA
-  instance. Migrating vjt's home setup is vjt's call.
+- Migration to Estia done 2026-10-27 (old YAML, helpers, dashboard removed;
+  last states in `.migration/`, gitignored). ha-config changes go through
+  its own repo and `scripts/push.sh`.
 
 ## Release
 1. `./scripts/check.sh` green, tree clean, on `main`.
