@@ -5,72 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.1.2 — 2026-10-27
+## 0.2.0 — 2026-10-27
 
 ### Added
 
-- **Boost**: a switch (and a card button) that runs the thermostat at its
+- **Sidebar panel per schedule**: a full heating page titled after the
+  schedule's device (or entry) with a radiator icon. Top to bottom: Home
+  Assistant's thermostat card to set the temperature by hand, the three
+  actions, the schedule, and the temperature chart; side by side on wide
+  screens. Renaming the device or the entry retitles it at once.
+- **Boost**: a switch (and an action) that runs the thermostat at its
   maximum for two hours, over the slots, away and a paused schedule, then
   goes back to what was before: the thermostat off, the setpoint it had, or
   the schedule. Turning the dial by hand, choosing Scheduled or All off ends
   it there and then. Entries are migrated (options 1.2: `boost`).
+- **Temperature chart with heating bands**: room and target temperature
+  over 24 hours, 7 or 30 days, with a cursor, shading the stretches when the
+  heating was probably on: heat mode and target above the room. An estimate,
+  and labelled so, for thermostats that do not report `hvac_action` (the
+  tado Smart Thermostat X over Matter does not).
 
 ### Changed
 
 - **Three actions, one choice**: Scheduled, Boost and All off sit side by
-  side in the card, and choosing one undoes the others. Turning Scheduled
-  off keeps the current temperature with no end: the mode formerly called
-  *Paused* is now labelled *Manual (no expiry)*.
-- **Settings shown as a summary**: the timeline and a line each for away and
-  preheat; *Edit* unlocks dragging, the slot editor and the settings, so a
+  side, and choosing one undoes the others. Turning Scheduled off keeps the
+  current temperature with no end: the mode formerly called *Paused* is now
+  *Manual (no expiry)*, and the card says so. Off says so too.
+- **The schedule as a summary**: the timeline, away and preheat in a line
+  each, and who is where ("🏠 Alice is home", "🚗 Alice is 12.4 km away,
+  heading home", "🏃 … moving away", "📍 … not moving", named after the
+  person Proximity tracks; the mode sensor's `proximity` attribute gains
+  `person`). *Edit* unlocks dragging, the slot editor and the settings, so a
   scroll on the phone no longer moves a slot.
-- **Temperature chart with heating bands**: the panel's history is Estia's
-  own chart (room and target temperature over 24 h / 7 / 30 days, with a
-  cursor) shading the stretches when heating was probably on: heat mode and
-  target above the room. An estimate, and labelled so, for thermostats that
-  do not report `hvac_action` (the tado Smart Thermostat X over Matter does
-  not).
-- **Travellers read like sentences**: "🏠 Alice is home", "🚗 Alice is
-  12.4 km away, heading home", "🏃 … moving away", "📍 … not moving", named
-  after the person Proximity tracks (resolved from its registry entry; the
-  mode sensor's `proximity` attribute gains `person`).
-- **The panel is a full heating page**: Home Assistant's thermostat card (to
-  set the temperature by hand), the schedule card, and the temperature
-  history over 24 hours, 7 days or 30 days, side by side on wide screens.
-- **The card's controls are Home Assistant's own entities card**: native
-  switches and number boxes instead of the small custom ones, *All off*
-  asks for confirmation, and the preheat radius and travellers are hidden
-  while preheat is off.
+- **The settings are Home Assistant's own controls** (switches, number
+  boxes) instead of small custom ones; the preheat radius is hidden while
+  preheat is off.
 - **A slot's setpoint can be set directly**: type it, drag the slider, or
-  scroll the mouse wheel over it, besides − / +.
-- **Paused and Off explain themselves**: the card says what the schedule is
-  (not) doing and offers *Resume schedule* / *Turn back on*.
-- **The sidebar item is titled after the device** as you named it, falling
-  back to the entry's title; renaming either retitles it at once, without
-  reloading the schedule.
+  scroll over it, besides − / +.
 - Bigger timeline, handles, buttons and steppers; easier to use on a phone.
-- The panel loads Home Assistant's card helpers itself, so the native cards
-  appear even when the browser opens the panel directly.
-- No more deprecated `async_get_device` calls (warned about by HA 2026.9).
 - The bundle URL carries a hash of its content, so browsers fetch every new
-  build without a version bump.
-
-## 0.1.1 — 2026-10-27
-
-### Added
-
-- **Sidebar panel per schedule.** Each Estia entry adds a sidebar item, titled
-  after the entry and with a radiator icon, showing its card full page.
-  Renaming the entry renames the panel.
+  build.
 
 ### Fixed
 
-- **The card's controls survive entity renames.** The mode sensor used to
-  publish the other entities' ids in an `entities` attribute computed once;
-  after renaming the device (which renames every entity) the card's switches
-  and numbers pointed at ids that no longer existed. The card now finds them
-  from the entity registry by device and translation key, and the attribute
-  is gone.
+- **The card's controls survive entity renames.** The mode sensor published
+  the other entities' ids in an `entities` attribute computed once; after
+  renaming the device (which renames every entity) the card's switches and
+  numbers pointed at ids that no longer existed. The card now finds them in
+  the entity registry by device and translation key; the attribute is gone.
+- No more deprecated `async_get_device` calls (warned about by HA 2026.9).
+- The schedule bar no longer swallows touches outside *Edit*: a finger on it
+  scrolls the page.
 
 ## 0.1.0 — 2026-10-26
 

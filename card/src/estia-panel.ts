@@ -11,6 +11,11 @@ import type { CardConfig, HomeAssistant } from "./types";
 
 const PERIOD_KEY = "estia-panel-period";
 
+// The thermostat card's ⋮ (more info) button has no option to hide it. The
+// panel is the thermostat's page already: hide it from inside the card.
+const HIDE_MORE_INFO = new CSSStyleSheet();
+HIDE_MORE_INFO.replaceSync("ha-icon-button.more-info { display: none !important; }");
+
 interface PanelInfo {
   title: string | null;
   config: { config_entry_id: string };
@@ -88,6 +93,15 @@ export class EstiaPanel extends LitElement {
     }
     this._card.hass = this.hass;
     return this._card;
+  }
+
+  protected updated(): void {
+    // The card's shadow root exists once it is connected, i.e. after the
+    // render that placed it; any later update finds it if this one did not.
+    const root = this.shadowRoot?.querySelector(".thermostat > *")?.shadowRoot;
+    if (root !== undefined && root !== null && !root.adoptedStyleSheets.includes(HIDE_MORE_INFO)) {
+      root.adoptedStyleSheets = [...root.adoptedStyleSheets, HIDE_MORE_INFO];
+    }
   }
 
   private _setPeriod(hours: number): void {

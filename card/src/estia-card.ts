@@ -446,6 +446,9 @@ export class EstiaCard extends LitElement {
   }
 
   private _renderTimeline(schedule: Schedule, slots: Slot[], t: ReturnType<typeof strings>): TemplateResult {
+    // Read-only unless editing: no listeners and no touch capture, so a
+    // finger on the bar scrolls the page like anywhere else.
+    const editing = this._editing;
     const now = minutesNow(new Date());
     const low = Math.min(...slots.map((slot) => slot.setpoint), 16);
     const high = Math.max(...slots.map((slot) => slot.setpoint), 23);
@@ -460,10 +463,10 @@ export class EstiaCard extends LitElement {
             return html`<div
               class="segment ${active ? "active" : ""} ${slot.id === this._selected ? "selected" : ""}"
               style="left:${percent(segment.from)};width:${percent(segment.to - segment.from)};background:${setpointColor(pending, low, high)}"
-              @pointerdown=${() => this._editing && this._onSegmentDown(slot)}
-              @pointerup=${() => this._editing && this._onSegmentUp(slot)}
-              @pointerleave=${() => window.clearTimeout(this._longPress)}
-              @contextmenu=${(event: Event) => event.preventDefault()}
+              @pointerdown=${editing ? () => this._onSegmentDown(slot) : nothing}
+              @pointerup=${editing ? () => this._onSegmentUp(slot) : nothing}
+              @pointerleave=${editing ? () => window.clearTimeout(this._longPress) : nothing}
+              @contextmenu=${editing ? (event: Event) => event.preventDefault() : nothing}
             >
               ${segment.to - segment.from >= 100 ? html`<span>${pending.toFixed(1)}°</span>` : nothing}
             </div>`;
@@ -692,6 +695,8 @@ export class EstiaCard extends LitElement {
       height: 72px;
       border-radius: 10px;
       background: var(--secondary-background-color);
+    }
+    .timeline.editing .bar {
       touch-action: none;
       user-select: none;
     }
@@ -705,9 +710,11 @@ export class EstiaCard extends LitElement {
       color: #fff;
       font-size: 1.05em;
       font-weight: 500;
-      cursor: pointer;
       opacity: 0.8;
       box-sizing: border-box;
+    }
+    .timeline.editing .segment {
+      cursor: pointer;
     }
     .segment.active {
       opacity: 1;
