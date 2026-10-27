@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Breaking
+
+- **Slot services require `profile_id`** (`set_slot`, `add_slot`,
+  `remove_slot`): automations and scripts calling them must add it. A
+  migrated entry's only profile is `default`.
+- **The mode sensor's `slots` attribute is gone**: templates reading it move
+  to `profiles` / `today_profile`.
+- **No way back without a backup**: once migrated (entry 1.3), 0.2.x can no
+  longer load the entry. To downgrade, restore a Home Assistant backup taken
+  before upgrading.
+
 ### Added
 
 - **Day profiles**: slots now live in named profiles, and each weekday uses
@@ -17,10 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Slot services take a `profile_id`** (`set_slot`, `add_slot`,
-  `remove_slot`).
-- **The mode sensor's `slots` attribute is replaced** by `profiles` (each with
-  its sorted slots), `week` and `today_profile`.
+- The mode sensor reports `profiles` (each with its sorted slots), `week` and
+  `today_profile`, which turns over at midnight.
 - A day before its first slot, or without slots, keeps the last slot of the
   most recent earlier day, and a manual hold ends at the next slot start
   across the following days.
