@@ -3,7 +3,8 @@
 ## What This Is
 Home Assistant custom integration + Lovelace card for a daily heating
 schedule, named after Estia (Hestia), Greek goddess of the hearth.
-Drives any `climate` entity: N daily slots (start, setpoint), away
+Drives any `climate` entity: day profiles of slots (start, setpoint), one
+per weekday, away
 setpoint when the house has been empty for a while, preheat when a
 resident is heading home, manual hold until the next slot. Ported
 from vjt's `ha-config` YAML (`automations/climate.yaml` + the
@@ -17,14 +18,14 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
 ## Architecture
 - **Pure scheduler** (`custom_components/estia/scheduler.py`): no HA
   imports. `decide(snapshot, now) -> Decision(mode, target,
-  hold_until)`, `hold_until_after(slots, now)`, `next_wakeup(snapshot,
+  hold_until)`, `hold_until_after(profiles, week, now)`, `next_wakeup(snapshot,
   now)`. All behaviour lives here and is table-tested.
 - **Runtime** (`runtime.py`): the HA glue. Reads entity states, parses
   them into a `Snapshot` at the boundary, calls `decide`, persists,
   pushes `climate.set_temperature`, fires events, schedules the next
   wakeup (`async_track_point_in_time`) and listens to state changes
   (`async_track_state_change_event`).
-- **Persistence**: everything mutable (slots, schedule/preheat
+- **Persistence**: everything mutable (profiles and week, schedule/preheat
   switches, away setpoint/delay, preheat radius, hold) is one Pydantic
   model `Settings` stored in the config entry **options**, written with
   `async_update_entry` (no update listener: no reload on change).
@@ -32,10 +33,11 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   sensors. Parsed into Pydantic models at the boundary.
 - **Entities are thin views** on the runtime: switch (schedule,
   preheat), number (away setpoint, away delay, preheat radius), sensor
-  (mode, enum; slots/active slot/hold/target/wiring in attributes),
-  button (resume, all off). No per-slot entities.
-- **Services** (`estia.set_slot`, `add_slot`, `remove_slot`, `resume`)
-  take `config_entry_id`; the card calls them.
+  (mode, enum; profiles/week/today's profile/active slot/hold/target/wiring
+  in attributes), button (resume, all off). No per-slot entities.
+- **Services** (`estia.set_slot`, `add_slot`, `remove_slot` with a
+  `profile_id`; `add_profile`, `rename_profile`, `remove_profile`,
+  `assign_day`; `resume`) take `config_entry_id`; the card calls them.
 - **Panel** (`card.py` `SchedulePanel`): one sidebar item per entry, titled
   after the device's user name, else the entry title; shows HA's native
   thermostat card (more-info hidden via adopted stylesheet), the card, and
@@ -55,14 +57,16 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   `card.py` via `async_register_static_paths` + `add_extra_js_url`.
 
 ## Behaviour (spec + vjt's rulings, 2026-10-26)
-- Active slot: latest start not after now; before the first start,
-  the last slot of the previous day. Duplicate start times rejected.
+- Active slot: latest start not after now among today's profile; before
+  the first start (or on an empty day), the last slot of the most recent
+  earlier day that has any. Duplicate start times in a profile rejected.
 - Away: presence `off` for `delay` minutes → away setpoint over all.
 - Preheat: enabled and any traveller closer than `radius` km **and**
   direction `towards` → slots apply with the house empty.
 - Manual hold: a setpoint change whose context has no `parent_id`,
   schedule on → hold until the next slot start strictly after now
-  (tomorrow's first if none; now + 1 day if no slots).
+  (the first start of the following days, each with its profile; now + 1
+  day if no slots anywhere).
 - **Away clears the hold** (ruling; the YAML resumed it on return).
 - **hvac off → mode Off, no setpoint pushed**; hvac back on → apply
   now (ruling; the YAML kept pushing).
