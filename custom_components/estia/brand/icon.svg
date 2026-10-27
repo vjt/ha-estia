@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"
+     role="img" aria-label="Estia — the hearth fire">
+  <title>Estia</title>
+  <!-- Estia (Hestia) is the hearth: a flame on a stone hearth carved with a
+       Greek key. Flat shapes and few colours, so that at the ~40px of Home
+       Assistant's integrations list the flame still reads as a flame and
+       the base as stone. -->
+  <defs>
+    <linearGradient id="estia-flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb300"/>
+      <stop offset="0.55" stop-color="#f4511e"/>
+      <stop offset="1" stop-color="#c62828"/>
+    </linearGradient>
+    <linearGradient id="estia-core" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff3c4"/>
+      <stop offset="1" stop-color="#ffca28"/>
+    </linearGradient>
+  </defs>
+  <!-- Flame -->
+  <path fill="url(#estia-flame)"
+        d="M128 14
+           C 150 58, 200 88, 200 140
+           C 200 180, 168 202, 128 202
+           C 88 202, 56 180, 56 140
+           C 56 106, 78 88, 90 68
+           C 94 92, 104 106, 116 110
+           C 108 80, 112 44, 128 14 Z"/>
+  <!-- Core -->
+  <path fill="url(#estia-core)"
+        d="M128 98
+           C 142 120, 164 136, 164 162
+           C 164 184, 148 198, 128 198
+           C 108 198, 92 184, 92 164
+           C 92 148, 102 138, 110 128
+           C 114 144, 120 150, 128 152
+           C 122 134, 120 116, 128 98 Z"/>
+  <!-- Hearth stone with a Greek key -->
+  <rect x="28" y="196" width="200" height="40" rx="8" fill="#8d6e63"/>
+  <path fill="none" stroke="#d7ccc8" stroke-width="5" stroke-linejoin="miter" stroke-linecap="square"
+        d="M42 226 V206 H62 V220 H52 V214
+           M72 226 V206 H92 V220 H82 V214
+           M102 226 V206 H122 V220 H112 V214
+           M132 226 V206 H152 V220 H142 V214
+           M162 226 V206 H182 V220 H172 V214
+           M192 226 V206 H212 V220 H202 V214"/>
+</svg>
