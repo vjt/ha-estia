@@ -271,7 +271,7 @@ var Q=globalThis,tt=Q.ShadowRoot&&(Q.ShadyCSS===void 0||Q.ShadyCSS.nativeShadow)
           class="chip day ${d===n.id?"active":""} ${u===a?"today":""}"
           ?disabled=${!this._editing}
           title=${u===a?`${f} (${i.today})`:f}
-          @click=${()=>this._assignDay(t,l)}
+          @click=${this._editing?()=>this._assignDay(t,l):p}
         >
           <span class="day-name">${f}</span>
           <span class="day-profile">${c.name}</span>

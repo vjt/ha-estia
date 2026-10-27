@@ -601,7 +601,7 @@ export class EstiaCard extends LitElement {
           class="chip day ${id === shown.id ? "active" : ""} ${index === today ? "today" : ""}"
           ?disabled=${!this._editing}
           title=${index === today ? `${label} (${t.today})` : label}
-          @click=${() => this._assignDay(schedule, day)}
+          @click=${this._editing ? () => this._assignDay(schedule, day) : nothing}
         >
           <span class="day-name">${label}</span>
           <span class="day-profile">${profile.name}</span>
