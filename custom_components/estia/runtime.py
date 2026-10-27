@@ -41,6 +41,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
+    async_track_time_change,
 )
 from homeassistant.helpers.start import async_at_started
 from homeassistant.util import dt as dt_util
@@ -151,6 +152,11 @@ class EstiaRuntime:
             async_track_state_change_event(self._hass, inputs, self._on_input_change)
         )
         self._unsubs.append(async_at_started(self._hass, self._on_started))
+        # A new day may use another profile even when no slot starts at
+        # midnight: decide again so the sensor reports today's profile.
+        self._unsubs.append(
+            async_track_time_change(self._hass, self._on_midnight, hour=0, minute=0, second=0)
+        )
 
     async def async_stop(self) -> None:
         for unsub in self._unsubs:
@@ -286,6 +292,10 @@ class EstiaRuntime:
     @callback
     def _on_wakeup(self, now: datetime) -> None:
         self._unsub_wakeup = None
+        self._hass.async_create_task(self.async_apply(None))
+
+    @callback
+    def _on_midnight(self, now: datetime) -> None:
         self._hass.async_create_task(self.async_apply(None))
 
     @callback

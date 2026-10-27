@@ -137,6 +137,38 @@ async def test_mode_sensor_exposes_profiles_and_week(
     assert attributes[Attr.ACTIVE_SLOT] == "day"
 
 
+async def test_today_profile_turns_over_at_midnight(
+    hass: HomeAssistant, entry: MockConfigEntry, freezer: FrozenDateTimeFactory
+) -> None:
+    """No slot starts at midnight, yet the day (and its profile) changes."""
+    base = {Field.CONFIG_ENTRY_ID: entry.entry_id}
+    await hass.services.async_call(
+        DOMAIN,
+        Service.REMOVE_SLOT,
+        {**base, Field.PROFILE_ID: PROFILE, Field.SLOT_ID: "night"},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        Service.ADD_PROFILE,
+        {**base, Field.NAME: "Tuesday", Field.COPY_FROM: PROFILE},
+        blocking=True,
+    )
+    tuesday = runtime(entry).state.profiles[-1]
+    await hass.services.async_call(
+        DOMAIN,
+        Service.ASSIGN_DAY,
+        {**base, Field.PROFILE_ID: tuesday.id, Field.DAY: Weekday.TUESDAY},
+        blocking=True,
+    )
+    # The last wakeup of Monday is the 16:00 slot; the next is Tuesday 08:00.
+    await advance(hass, freezer, local(16, 0) - local(10, 0))
+    await advance(hass, freezer, local(0, 0, day=27) - local(16, 0) + timedelta(seconds=1))
+    sensor = hass.states.get(entity(hass, entry, EntityKey.MODE))
+    assert sensor is not None
+    assert sensor.attributes[Attr.TODAY_PROFILE] == tuesday.id
+
+
 async def test_follows_slot_starts(
     hass: HomeAssistant,
     entry: MockConfigEntry,
