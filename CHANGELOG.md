@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Day profiles**: slots now live in named profiles, and each weekday uses
+  one, so the weekend can differ from the weekdays. The card shows profile
+  chips and a weekday row, and adds, renames and deletes profiles in edit
+  mode. New services `add_profile`, `rename_profile`, `remove_profile` and
+  `assign_day`.
+
+### Changed
+
+- **Slot services take a `profile_id`** (`set_slot`, `add_slot`,
+  `remove_slot`).
+- **The mode sensor's `slots` attribute is replaced** by `profiles` (each with
+  its sorted slots), `week` and `today_profile`.
+- A day before its first slot, or without slots, keeps the last slot of the
+  most recent earlier day, and a manual hold ends at the next slot start
+  across the following days.
+- Existing schedules are migrated (entry 1.3) to one *Every day* profile used
+  all week: behaviour is unchanged.
+
 ## 0.2.2 — 2026-10-27
 
 ### Added
