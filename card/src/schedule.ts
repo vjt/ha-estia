@@ -83,6 +83,7 @@ export function parseSchedule(entity: HassEntity): Schedule {
     return {
       distance: asString(field(pair, "distance"), "distance sensor"),
       direction: asString(field(pair, "direction"), "direction sensor"),
+      person: asNullableString(field(pair, "person"), "tracked person"),
     };
   });
   const hold = asNullableString(field(a, "hold_until"), "hold_until");

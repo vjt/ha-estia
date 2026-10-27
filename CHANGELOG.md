@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Settings shown as a summary**: the timeline and a line each for away and
   preheat; *Edit* unlocks dragging, the slot editor and the settings, so a
   scroll on the phone no longer moves a slot.
+- **Travellers read like sentences**: "🏠 Alice is home", "🚗 Alice is
+  12.4 km away, heading home", "🏃 … moving away", "📍 … not moving", named
+  after the person Proximity tracks (resolved from its registry entry; the
+  mode sensor's `proximity` attribute gains `person`).
 - **The panel is a full heating page**: Home Assistant's thermostat card (to
   set the temperature by hand), the schedule card, and the temperature
   history over 24 hours, 7 days or 30 days, side by side on wide screens.

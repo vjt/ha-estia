@@ -18,7 +18,7 @@ import {
   setpointColor,
   snap,
 } from "./schedule";
-import type { CardConfig, HassEntity, HomeAssistant, Mode, Schedule, Slot } from "./types";
+import type { CardConfig, HassEntity, HomeAssistant, Mode, Schedule, Slot, Traveller } from "./types";
 
 const LONG_PRESS_MS = 550;
 const SETPOINT_DEBOUNCE_MS = 900;
@@ -62,6 +62,17 @@ function stringAttr(entity: HassEntity | undefined, key: string): string | null 
   if (entity === undefined) return null;
   const value = entity.attributes[key];
   return typeof value === "string" ? value : null;
+}
+
+/** A proximity distance sensor's value in metres; null when unknown. */
+function distanceMeters(entity: HassEntity | undefined): number | null {
+  if (entity === undefined) return null;
+  const value = Number(entity.state);
+  if (entity.state === "" || !Number.isFinite(value)) return null;
+  const factor: Record<string, number> = { m: 1, km: 1000, mi: 1609.344, ft: 0.3048, yd: 0.9144 };
+  const unit = stringAttr(entity, "unit_of_measurement");
+  if (unit === null || !(unit in factor)) return null;
+  return value * factor[unit];
 }
 
 function percent(minutes: number): string {
@@ -392,6 +403,33 @@ export class EstiaCard extends LitElement {
     </div>`;
   }
 
+  /** One line per tracked person: home, or how far and which way. */
+  private _renderTraveller(pair: Traveller, t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
+    const hass = this.hass;
+    if (hass === undefined) return nothing;
+    const person = pair.person === null ? undefined : hass.states[pair.person];
+    const distance = hass.states[pair.distance];
+    const direction = hass.states[pair.direction]?.state;
+    const name =
+      stringAttr(person, "friendly_name") ?? stringAttr(distance, "friendly_name") ?? pair.distance;
+    const meters = distanceMeters(distance);
+    let icon: string;
+    let text: string;
+    if (person?.state === "home" || direction === "arrived" || meters === 0) {
+      icon = "🏠";
+      text = t.travellerHome(name);
+    } else if (meters === null) {
+      icon = "❔";
+      text = t.travellerUnknown(name);
+    } else {
+      icon = direction === "towards" ? "🚗" : direction === "away_from" ? "🏃" : "📍";
+      const km = new Intl.NumberFormat(hass.language, { maximumFractionDigits: 1 }).format(meters / 1000);
+      const way = direction === undefined ? "" : (t.directions[direction] ?? direction);
+      text = t.travellerAway(name, `${km} km`, way);
+    }
+    return html`<div class="traveller"><span class="emoji">${icon}</span><span>${text}</span></div>`;
+  }
+
   /** The settings at a glance, while not editing. */
   private _renderSummary(schedule: Schedule, t: ReturnType<typeof strings>): TemplateResult | typeof nothing {
     if (this.hass === undefined || this._config === undefined) return nothing;
@@ -403,18 +441,7 @@ export class EstiaCard extends LitElement {
     return html`<div class="summary">
       <div>${t.awaySummary(value(e.away_setpoint), value(e.away_delay))}</div>
       <div>${preheatOn ? t.preheatSummary(value(e.preheat_radius)) : t.preheatOff}</div>
-      ${preheatOn
-        ? schedule.proximity.map((pair) => {
-            const distance = hass.states[pair.distance];
-            const direction = hass.states[pair.direction];
-            const name = stringAttr(distance, "friendly_name") ?? pair.distance;
-            const unit = stringAttr(distance, "unit_of_measurement") ?? "";
-            const where = direction === undefined ? "—" : (t.directions[direction.state] ?? direction.state);
-            return html`<div class="secondary">
-              ${name}: ${distance === undefined ? "—" : `${distance.state} ${unit}`}, ${where}
-            </div>`;
-          })
-        : nothing}
+      ${preheatOn ? schedule.proximity.map((pair) => this._renderTraveller(pair, t)) : nothing}
     </div>`;
   }
 
@@ -649,6 +676,16 @@ export class EstiaCard extends LitElement {
     }
     .secondary {
       color: var(--secondary-text-color);
+    }
+    .traveller {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .emoji {
+      font-size: 1.3em;
+      width: 1.4em;
+      text-align: center;
     }
     .bar {
       position: relative;

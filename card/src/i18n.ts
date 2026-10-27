@@ -5,6 +5,9 @@ import type { Mode } from "./types";
 interface Strings {
   modes: Record<Mode, string>;
   directions: Record<string, string>;
+  travellerHome: (name: string) => string;
+  travellerAway: (name: string, distance: string, direction: string) => string;
+  travellerUnknown: (name: string) => string;
   manualUntil: (time: string) => string;
   returnToSchedule: string;
   schedule: string;
@@ -49,9 +52,12 @@ const EN: Strings = {
   directions: {
     towards: "heading home",
     away_from: "moving away",
-    stationary: "stationary",
+    stationary: "not moving",
     arrived: "arrived",
   },
+  travellerHome: (name) => `${name} is home`,
+  travellerAway: (name, distance, direction) => `${name} is ${distance} away, ${direction}`,
+  travellerUnknown: (name) => `${name}: position unknown`,
   manualUntil: (time) => `Manual until ${time}`,
   returnToSchedule: "Return to schedule",
   schedule: "Schedule",
@@ -101,9 +107,12 @@ const IT: Strings = {
   directions: {
     towards: "sta tornando",
     away_from: "si allontana",
-    stationary: "fermo",
+    stationary: "non si muove",
     arrived: "arrivato",
   },
+  travellerHome: (name) => `${name} è a casa`,
+  travellerAway: (name, distance, direction) => `${name} è a ${distance}, ${direction}`,
+  travellerUnknown: (name) => `${name}: posizione sconosciuta`,
   manualUntil: (time) => `Manuale fino alle ${time}`,
   returnToSchedule: "Ritorna al programma",
   schedule: "Programma",

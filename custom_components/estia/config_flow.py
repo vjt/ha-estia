@@ -10,10 +10,6 @@ import voluptuous as vol
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.proximity.const import (
-    ATTR_DIR_OF_TRAVEL,
-    ATTR_DIST_TO,
-)
-from homeassistant.components.proximity.const import (
     DOMAIN as PROXIMITY_DOMAIN,
 )
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
@@ -42,15 +38,12 @@ from .const import (
     INITIAL_SLOT_SETPOINT,
     Field,
 )
-from .models import StoredState, TravellerSensors, Wiring
+from .models import StoredState, Wiring
+from .proximity import ProximityPairError, resolve_proximity
 from .scheduler import Slot
 
 DEFAULT_NAME = "Heating"
 MAX_INITIAL_SLOTS = 24
-
-
-class ProximityPairError(Exception):
-    """A selected distance sensor has no proximity direction sensor beside it."""
 
 
 def initial_slots(count: int) -> tuple[Slot, ...]:
@@ -66,33 +59,6 @@ def initial_slots(count: int) -> tuple[Slot, ...]:
             )
         )
     return tuple(slots)
-
-
-def resolve_proximity(
-    registry: er.EntityRegistry, distance_ids: list[str]
-) -> tuple[TravellerSensors, ...]:
-    """Pair each proximity distance sensor with its direction-of-travel sensor.
-
-    The proximity integration gives both the same unique_id prefix. Raises
-    ProximityPairError when a sensor is not a proximity distance sensor or its
-    direction sensor is missing.
-    """
-    pairs: list[TravellerSensors] = []
-    for distance_id in distance_ids:
-        entry = registry.async_get(distance_id)
-        suffix = f"_{ATTR_DIST_TO}"
-        if (
-            entry is None
-            or entry.platform != PROXIMITY_DOMAIN
-            or not entry.unique_id.endswith(suffix)
-        ):
-            raise ProximityPairError(distance_id)
-        direction_uid = entry.unique_id.removesuffix(suffix) + f"_{ATTR_DIR_OF_TRAVEL}"
-        direction_id = registry.async_get_entity_id(SENSOR_DOMAIN, PROXIMITY_DOMAIN, direction_uid)
-        if direction_id is None:
-            raise ProximityPairError(distance_id)
-        pairs.append(TravellerSensors(distance=distance_id, direction=direction_id))
-    return tuple(pairs)
 
 
 def _wiring_schema(defaults: Mapping[str, Any]) -> dict[vol.Marker, Any]:

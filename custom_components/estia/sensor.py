@@ -6,11 +6,13 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .const import SETPOINT_MAX, SETPOINT_MIN, SETPOINT_STEP, Attr, EntityKey, Mode
 from .entity import EstiaEntity
+from .proximity import tracked_entity
 from .runtime import EstiaConfigEntry
 from .scheduler import active_slot, sorted_slots
 
@@ -42,6 +44,7 @@ class ModeSensor(EstiaEntity, SensorEntity):
         state = runtime.state
         active = active_slot(state.slots, dt_util.now())
         decision = runtime.decision
+        registry = er.async_get(self.hass)
         return {
             Attr.SLOTS: [
                 {"id": slot.id, "start": slot.start.strftime("%H:%M"), "setpoint": slot.setpoint}
@@ -54,7 +57,10 @@ class ModeSensor(EstiaEntity, SensorEntity):
             Attr.CONFIG_ENTRY_ID: runtime.entry_id,
             Attr.CLIMATE: runtime.wiring.climate,
             Attr.PRESENCE: runtime.wiring.presence,
-            Attr.PROXIMITY: [pair.model_dump() for pair in runtime.wiring.proximity],
+            Attr.PROXIMITY: [
+                {**pair.model_dump(), "person": tracked_entity(registry, pair.distance)}
+                for pair in runtime.wiring.proximity
+            ],
             Attr.SETPOINT_MIN: SETPOINT_MIN,
             Attr.SETPOINT_MAX: SETPOINT_MAX,
             Attr.SETPOINT_STEP: SETPOINT_STEP,

@@ -39,6 +39,7 @@ export interface Slot {
 export interface Traveller {
   distance: string;
   direction: string;
+  person: string | null; // the tracked person or device; null for "nearest"
 }
 
 /** The schedule's other entities, found by device and translation key so
