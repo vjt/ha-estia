@@ -42,6 +42,7 @@ from custom_components.estia.const import (
     Field,
     Mode,
     Service,
+    Weekday,
 )
 from custom_components.estia.const import Event as EstiaEvent
 from custom_components.estia.entity import unique_id
@@ -364,6 +365,104 @@ async def test_slot_services(
             DOMAIN, Service.REMOVE_SLOT, {**base, Field.SLOT_ID: "nope"}, blocking=True
         )
     assert unknown.value.translation_key == "unknown_slot"
+
+
+async def test_profile_services(
+    hass: HomeAssistant, entry: MockConfigEntry, thermostat: FakeThermostat
+) -> None:
+    base = {Field.CONFIG_ENTRY_ID: entry.entry_id}
+    await hass.services.async_call(
+        DOMAIN,
+        Service.ADD_PROFILE,
+        {**base, Field.NAME: "Weekend", Field.COPY_FROM: PROFILE},
+        blocking=True,
+    )
+    state = runtime(entry).state
+    weekend = state.profiles[-1]
+    assert weekend.name == "Weekend"
+    assert [(slot.start, slot.setpoint) for slot in weekend.slots] == [
+        (slot.start, slot.setpoint) for slot in state.profiles[0].slots
+    ]
+    # Copied slots get their own ids: editing the copy leaves the original alone.
+    assert {slot.id for slot in weekend.slots}.isdisjoint(
+        slot.id for slot in state.profiles[0].slots
+    )
+
+    await hass.services.async_call(
+        DOMAIN,
+        Service.ADD_SLOT,
+        {**base, Field.PROFILE_ID: weekend.id, Field.START: "09:00", Field.SETPOINT: 23.0},
+        blocking=True,
+    )
+    assert thermostat.setpoint == 20.0  # Monday still uses the first profile
+
+    # 2026-10-26 is a Monday.
+    await hass.services.async_call(
+        DOMAIN,
+        Service.ASSIGN_DAY,
+        {**base, Field.PROFILE_ID: weekend.id, Field.DAY: Weekday.MONDAY},
+        blocking=True,
+    )
+    assert thermostat.setpoint == 23.0
+    assert runtime(entry).state.week == (weekend.id, *(PROFILE,) * 6)
+    sensor = hass.states.get(entity(hass, entry, EntityKey.MODE))
+    assert sensor is not None
+    assert sensor.attributes[Attr.TODAY_PROFILE] == weekend.id
+
+    await hass.services.async_call(
+        DOMAIN,
+        Service.RENAME_PROFILE,
+        {**base, Field.PROFILE_ID: weekend.id, Field.NAME: "Mondays"},
+        blocking=True,
+    )
+    assert entry.options["profiles"][-1]["name"] == "Mondays"
+
+    await hass.services.async_call(
+        DOMAIN,
+        Service.ASSIGN_DAY,
+        {**base, Field.PROFILE_ID: PROFILE, Field.DAY: Weekday.MONDAY},
+        blocking=True,
+    )
+    assert thermostat.setpoint == 20.0
+    await hass.services.async_call(
+        DOMAIN, Service.REMOVE_PROFILE, {**base, Field.PROFILE_ID: weekend.id}, blocking=True
+    )
+    assert [profile.id for profile in runtime(entry).state.profiles] == [PROFILE]
+
+
+@pytest.mark.parametrize(
+    ("service", "data", "translation_key"),
+    [
+        (Service.REMOVE_PROFILE, {Field.PROFILE_ID: PROFILE}, "profile_in_use"),
+        (Service.REMOVE_PROFILE, {Field.PROFILE_ID: "nope"}, "unknown_profile"),
+        (
+            Service.ASSIGN_DAY,
+            {Field.PROFILE_ID: "nope", Field.DAY: Weekday.FRIDAY},
+            "unknown_profile",
+        ),
+        (Service.RENAME_PROFILE, {Field.PROFILE_ID: "nope", Field.NAME: "X"}, "unknown_profile"),
+        (Service.ADD_PROFILE, {Field.NAME: "X", Field.COPY_FROM: "nope"}, "unknown_profile"),
+        (
+            Service.ADD_SLOT,
+            {Field.PROFILE_ID: "nope", Field.START: "12:00", Field.SETPOINT: 20.0},
+            "unknown_profile",
+        ),
+    ],
+)
+async def test_profile_service_errors(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    service: Service,
+    data: dict[Field, object],
+    translation_key: str,
+) -> None:
+    before = runtime(entry).state
+    with pytest.raises(ServiceValidationError) as error:
+        await hass.services.async_call(
+            DOMAIN, service, {Field.CONFIG_ENTRY_ID: entry.entry_id, **data}, blocking=True
+        )
+    assert error.value.translation_key == translation_key
+    assert runtime(entry).state == before
 
 
 async def test_service_rejects_unknown_entry(hass: HomeAssistant, entry: MockConfigEntry) -> None:

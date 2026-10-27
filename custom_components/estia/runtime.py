@@ -46,7 +46,14 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import DistanceConverter
 
-from .const import BOOST_DURATION_MIN, DOMAIN, HVAC_ON_SETTLE_SECONDS, Direction, Field
+from .const import (
+    BOOST_DURATION_MIN,
+    DOMAIN,
+    HVAC_ON_SETTLE_SECONDS,
+    Direction,
+    Field,
+    Weekday,
+)
 from .const import Event as EstiaEvent
 from .models import Boost, StoredState, TravellerSensors, Wiring
 from .scheduler import (
@@ -524,3 +531,66 @@ class EstiaRuntime:
             return profile.model_copy(update={"slots": tuple(slots)})
 
         await self._async_mutate(lambda state: self._edit_profile(state, profile_id, edit))
+
+    # -- profiles ----------------------------------------------------------
+
+    async def async_add_profile(self, name: str, copy_from: str) -> Profile:
+        """Add a profile named `name` with a copy of the slots of `copy_from`.
+        Raises ServiceValidationError on an unknown `copy_from`."""
+        new_id = uuid.uuid4().hex[:8]
+        created: list[Profile] = []
+
+        def change(state: StoredState) -> StoredState:
+            source = state.profiles[self._profile_index(state.profiles, copy_from)]
+            profile = Profile(
+                id=new_id,
+                name=name,
+                slots=tuple(
+                    Slot(id=uuid.uuid4().hex[:8], start=slot.start, setpoint=slot.setpoint)
+                    for slot in source.slots
+                ),
+            )
+            created.append(profile)
+            return state.model_copy(update={"profiles": (*state.profiles, profile)})
+
+        await self._async_mutate(change)
+        return created[0]
+
+    async def async_rename_profile(self, profile_id: str, name: str) -> None:
+        """Raises ServiceValidationError on an unknown profile id."""
+        await self._async_mutate(
+            lambda state: self._edit_profile(
+                state, profile_id, lambda profile: profile.model_copy(update={"name": name})
+            )
+        )
+
+    async def async_remove_profile(self, profile_id: str) -> None:
+        """Raises ServiceValidationError on an unknown profile id or a profile
+        some weekday uses (which also keeps the last profile: the week always
+        names one)."""
+
+        def change(state: StoredState) -> StoredState:
+            index = self._profile_index(state.profiles, profile_id)
+            if profile_id in state.week:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="profile_in_use",
+                    translation_placeholders={"profile_id": profile_id},
+                )
+            profiles = list(state.profiles)
+            del profiles[index]
+            return state.model_copy(update={"profiles": tuple(profiles)})
+
+        await self._async_mutate(change)
+
+    async def async_assign_day(self, day: Weekday, profile_id: str) -> None:
+        """Make `day` use the profile. Raises ServiceValidationError on an
+        unknown profile id."""
+
+        def change(state: StoredState) -> StoredState:
+            self._profile_index(state.profiles, profile_id)
+            week = list(state.week)
+            week[tuple(Weekday).index(day)] = profile_id
+            return state.model_copy(update={"week": tuple(week)})
+
+        await self._async_mutate(change)

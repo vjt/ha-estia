@@ -95,6 +95,9 @@
     },
     "unknown_profile": {
       "message": "No profile with id {profile_id}."
+    },
+    "profile_in_use": {
+      "message": "The profile {profile_id} is assigned to a weekday. Assign that day to another profile first."
     }
   },
   "services": {
@@ -164,6 +167,74 @@
         }
       }
     },
+    "add_profile": {
+      "name": "Add profile",
+      "description": "Adds a day profile with a copy of the slots of an existing one.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Schedule",
+          "description": "The Estia schedule to edit."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name of the new profile."
+        },
+        "copy_from": {
+          "name": "Copy from",
+          "description": "Id of the profile whose slots are copied."
+        }
+      }
+    },
+    "rename_profile": {
+      "name": "Rename profile",
+      "description": "Changes the name of a day profile.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Schedule",
+          "description": "The Estia schedule to edit."
+        },
+        "profile_id": {
+          "name": "Profile",
+          "description": "Id of the profile, from the mode sensor's profiles attribute."
+        },
+        "name": {
+          "name": "Name",
+          "description": "The new name."
+        }
+      }
+    },
+    "remove_profile": {
+      "name": "Remove profile",
+      "description": "Removes a day profile that no weekday uses.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Schedule",
+          "description": "The Estia schedule to edit."
+        },
+        "profile_id": {
+          "name": "Profile",
+          "description": "Id of the profile, from the mode sensor's profiles attribute."
+        }
+      }
+    },
+    "assign_day": {
+      "name": "Assign day",
+      "description": "Makes a weekday use a profile.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Schedule",
+          "description": "The Estia schedule to edit."
+        },
+        "profile_id": {
+          "name": "Profile",
+          "description": "Id of the profile, from the mode sensor's profiles attribute."
+        },
+        "day": {
+          "name": "Day",
+          "description": "The weekday."
+        }
+      }
+    },
     "resume": {
       "name": "Return to schedule",
       "description": "Drops the manual hold and applies the schedule now.",
@@ -172,6 +243,19 @@
           "name": "Schedule",
           "description": "The Estia schedule."
         }
+      }
+    }
+  },
+  "selector": {
+    "weekday": {
+      "options": {
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
       }
     }
   }
