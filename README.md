@@ -137,6 +137,28 @@ entity: sensor.heating_mode
 
 English and Italian; other languages fall back to English.
 
+## More than one thermostat
+
+Add Estia once per thermostat. Each entry is a complete, independent
+schedule: its own slots, away setpoint and delay, preheat, boost and manual
+hold, its own device and entities, and its own sidebar item. The same
+thermostat cannot be added twice.
+
+What this means today:
+
+- **Nothing is shared.** The presence and proximity sensors are chosen again
+  for each entry, and changing the away delay in one does not change the
+  others.
+- **No house-wide controls.** *All off* and *Boost* act on one thermostat.
+- **One sidebar item per thermostat**, titled after its device.
+- **Events carry `config_entry_id`.** The notification example below fires
+  for every thermostat; filter on `config_entry_id` (the mode sensor's
+  attribute) if you want it for one only.
+
+Estia has been built and tested with a single thermostat. A shared panel
+with a room picker, house-wide *All off* / *Boost* and per-house
+notifications would be the way to grow it; patches welcome.
+
 ## Notifications
 
 The integration fires events instead of sending notifications. This
