@@ -9,8 +9,9 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .card import SchedulePanel, async_register_card, card_digest, schedule_device
-from .const import DAYS_PER_WEEK, DOMAIN, INITIAL_PROFILE_ID, INITIAL_PROFILE_NAME
+from .const import DAYS_PER_WEEK, DOMAIN, INITIAL_PROFILE_ID
 from .models import Wiring
+from .naming import async_every_day_name
 from .runtime import EstiaConfigEntry, EstiaRuntime
 from .services import async_register_services
 
@@ -46,7 +47,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: EstiaConfigEntry) -> b
         options["profiles"] = [
             {
                 "id": INITIAL_PROFILE_ID,
-                "name": INITIAL_PROFILE_NAME,
+                "name": await async_every_day_name(hass),
                 "slots": entry.options["slots"],
             }
         ]

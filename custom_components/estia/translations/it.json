@@ -257,6 +257,11 @@
         "saturday": "Sabato",
         "sunday": "Domenica"
       }
+    },
+    "profile_name": {
+      "options": {
+        "every_day": "Ogni giorno"
+      }
     }
   }
 }

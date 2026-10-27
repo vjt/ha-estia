@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -69,6 +71,15 @@ def no_frontend(hass: HomeAssistant) -> Generator[Frontend]:
         patch("custom_components.estia.card.async_remove_panel") as remove,
     ):
         yield Frontend(register_card=card, register_panel=panel, remove_panel=remove)
+
+
+TRANSLATIONS = Path(__file__).parent.parent / "custom_components" / "estia" / "translations"
+
+
+def every_day_name(language: str) -> str:
+    """The first profile's name as the integration's translations give it."""
+    strings = json.loads((TRANSLATIONS / f"{language}.json").read_text())
+    return strings["selector"]["profile_name"]["options"]["every_day"]
 
 
 def local(hh: int, mm: int, day: int = 26) -> datetime:

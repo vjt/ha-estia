@@ -257,6 +257,11 @@
         "saturday": "Saturday",
         "sunday": "Sunday"
       }
+    },
+    "profile_name": {
+      "options": {
+        "every_day": "Every day"
+      }
     }
   }
 }

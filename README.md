@@ -13,7 +13,8 @@ of the hearth.
   the card.
 - **Day profiles**: slots live in named profiles (for example *Weekdays* and
   *Weekend*), and each weekday uses one profile. A new schedule starts with a
-  single profile, *Every day*, used all week. A Friday evening slot carries
+  single profile, *Every day* (named in Home Assistant's language), used all
+  week. A Friday evening slot carries
   over into Saturday until Saturday's first slot starts.
 - **Away**: when the presence sensor has been off for the away delay, the away
   setpoint wins over every slot.

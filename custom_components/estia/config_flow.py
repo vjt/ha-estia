@@ -36,12 +36,12 @@ from .const import (
     INITIAL_AWAY_SETPOINT,
     INITIAL_PREHEAT_RADIUS_KM,
     INITIAL_PROFILE_ID,
-    INITIAL_PROFILE_NAME,
     INITIAL_SLOT_COUNT,
     INITIAL_SLOT_SETPOINT,
     Field,
 )
 from .models import StoredState, Wiring
+from .naming import async_every_day_name
 from .proximity import ProximityPairError, resolve_proximity
 from .scheduler import Profile, Slot
 
@@ -105,7 +105,7 @@ class EstiaConfigFlow(ConfigFlow, domain=DOMAIN):
                     profiles=(
                         Profile(
                             id=INITIAL_PROFILE_ID,
-                            name=INITIAL_PROFILE_NAME,
+                            name=await async_every_day_name(self.hass),
                             slots=initial_slots(int(user_input[Field.SLOT_COUNT])),
                         ),
                     ),

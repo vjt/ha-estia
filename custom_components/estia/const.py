@@ -130,8 +130,6 @@ PREHEAT_RADIUS_MAX_KM: Final = 100.0
 INITIAL_SLOT_COUNT: Final = 3
 INITIAL_SLOT_SETPOINT: Final = 20.0
 INITIAL_PROFILE_ID: Final = "default"
-# Not translated: a config flow has no translation lookup for its own data.
-INITIAL_PROFILE_NAME: Final = "Every day"
 INITIAL_AWAY_SETPOINT: Final = 16.0
 INITIAL_AWAY_DELAY_MIN: Final = 10
 INITIAL_PREHEAT_RADIUS_KM: Final = 20.0

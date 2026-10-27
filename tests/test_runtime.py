@@ -36,7 +36,6 @@ from custom_components.estia.const import (
     DOMAIN,
     INITIAL_AWAY_SETPOINT,
     INITIAL_PROFILE_ID,
-    INITIAL_PROFILE_NAME,
     Attr,
     EntityKey,
     Field,
@@ -55,6 +54,7 @@ from .conftest import (
     PROFILE,
     FakeThermostat,
     Frontend,
+    every_day_name,
     local,
     make_entry,
 )
@@ -681,6 +681,8 @@ async def test_migrates_slots_to_one_profile_for_every_day(
     minor_version: int,
 ) -> None:
     freezer.move_to(local(10, 0))
+    # The migrated profile is named in Home Assistant's language.
+    hass.config.language = "it"
     legacy = legacy_entry(minor_version)
     old_slots = legacy.options["slots"]
     legacy.add_to_hass(hass)
@@ -691,7 +693,8 @@ async def test_migrates_slots_to_one_profile_for_every_day(
     assert "slots" not in legacy.options
     state = StoredState.model_validate(legacy.options)
     assert [profile.id for profile in state.profiles] == [INITIAL_PROFILE_ID]
-    assert state.profiles[0].name == INITIAL_PROFILE_NAME
+    assert state.profiles[0].name == every_day_name("it")
+    assert every_day_name("it") != every_day_name("en")
     assert [slot.model_dump(mode="json") for slot in state.profiles[0].slots] == old_slots
     assert state.week == (INITIAL_PROFILE_ID,) * 7
     assert thermostat.setpoint == 20.0
