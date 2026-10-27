@@ -178,6 +178,13 @@ export class EstiaCard extends LitElement {
     return !(this._drag !== null && changed.size === 1 && changed.has("hass"));
   }
 
+  protected updated(changed: PropertyValues<this>): void {
+    // Opening the name field (add or rename) puts the cursor in it.
+    if (changed.has("_naming") && changed.get("_naming") === null && this._naming !== null) {
+      this.renderRoot.querySelector<HTMLInputElement>(".profile-tools input")?.focus();
+    }
+  }
+
   // -- services ------------------------------------------------------------
 
   private async _call(domain: string, service: string, data: Record<string, unknown>): Promise<void> {
@@ -342,7 +349,10 @@ export class EstiaCard extends LitElement {
     });
   }
 
-  private async _saveName(schedule: Schedule, naming: Naming): Promise<void> {
+  /** Save the name being typed (the current one, not a render's copy). */
+  private async _saveName(schedule: Schedule): Promise<void> {
+    const naming = this._naming;
+    if (naming === null) return;
     const name = naming.value.trim();
     if (name === "") return;
     const profile = this._shownProfile(schedule);
@@ -576,8 +586,12 @@ export class EstiaCard extends LitElement {
                 .value=${naming.value}
                 @input=${(event: Event) =>
                   (this._naming = { kind: naming.kind, value: (event.target as HTMLInputElement).value })}
+                @keydown=${(event: KeyboardEvent) => {
+                  if (event.key === "Enter") void this._saveName(schedule);
+                  else if (event.key === "Escape") this._naming = null;
+                }}
               />
-              <button class="primary" @click=${() => this._saveName(schedule, naming)}>${t.save}</button>
+              <button class="primary" @click=${() => this._saveName(schedule)}>${t.save}</button>
               <button @click=${() => (this._naming = null)}>${t.cancel}</button>
             </div>`
         : nothing}

@@ -34,7 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   most recent earlier day, and a manual hold ends at the next slot start
   across the following days.
 - Existing schedules are migrated (entry 1.3) to one *Every day* profile used
-  all week: behaviour is unchanged.
+  all week: behaviour is unchanged. Its name follows Home Assistant's language,
+  like a new entry's.
+- The card's profile name field takes the focus when it opens; Enter saves,
+  Escape cancels.
 
 ## 0.2.2 — 2026-10-27
 
