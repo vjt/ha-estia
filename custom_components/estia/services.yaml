@@ -5,6 +5,11 @@ set_slot:
       selector:
         config_entry:
           integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
     slot_id:
       required: true
       example: "slot1"
@@ -33,6 +38,11 @@ add_slot:
       selector:
         config_entry:
           integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
     start:
       required: true
       example: "12:00"
@@ -56,6 +66,11 @@ remove_slot:
       selector:
         config_entry:
           integration: estia
+    profile_id:
+      required: true
+      example: "default"
+      selector:
+        text:
     slot_id:
       required: true
       example: "slot1"

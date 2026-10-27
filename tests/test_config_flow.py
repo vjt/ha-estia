@@ -12,7 +12,13 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.estia.config_flow import initial_slots
-from custom_components.estia.const import DOMAIN, INITIAL_SLOT_SETPOINT, Field
+from custom_components.estia.const import (
+    DOMAIN,
+    INITIAL_PROFILE_ID,
+    INITIAL_PROFILE_NAME,
+    INITIAL_SLOT_SETPOINT,
+    Field,
+)
 from custom_components.estia.models import StoredState, TravellerSensors, Wiring
 
 from .conftest import CLIMATE, PRESENCE, FakeThermostat, make_entry
@@ -76,7 +82,10 @@ async def test_user_flow_creates_entry(hass: HomeAssistant, thermostat: FakeTher
         TravellerSensors(distance=alice, direction="sensor.alice_direction"),
     )
     state = StoredState.model_validate(result["options"])
-    assert state.slots == initial_slots(4)
+    assert [profile.id for profile in state.profiles] == [INITIAL_PROFILE_ID]
+    assert state.profiles[0].name == INITIAL_PROFILE_NAME
+    assert state.profiles[0].slots == initial_slots(4)
+    assert state.week == (INITIAL_PROFILE_ID,) * 7
     assert state.preheat_enabled
     assert state.schedule_enabled
 

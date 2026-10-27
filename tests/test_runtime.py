@@ -35,6 +35,8 @@ from custom_components.estia.card import schedule_device
 from custom_components.estia.const import (
     DOMAIN,
     INITIAL_AWAY_SETPOINT,
+    INITIAL_PROFILE_ID,
+    INITIAL_PROFILE_NAME,
     Attr,
     EntityKey,
     Field,
@@ -43,11 +45,13 @@ from custom_components.estia.const import (
 )
 from custom_components.estia.const import Event as EstiaEvent
 from custom_components.estia.entity import unique_id
+from custom_components.estia.models import StoredState
 
 from .conftest import (
     DIRECTION,
     DISTANCE,
     PRESENCE,
+    PROFILE,
     FakeThermostat,
     Frontend,
     local,
@@ -108,6 +112,28 @@ async def test_applies_active_slot_on_start(
 ) -> None:
     assert thermostat.setpoint == 20.0
     assert mode(hass, entry) == Mode.HOME
+
+
+async def test_mode_sensor_exposes_profiles_and_week(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    sensor = hass.states.get(entity(hass, entry, EntityKey.MODE))
+    assert sensor is not None
+    attributes = sensor.attributes
+    assert attributes[Attr.PROFILES] == [
+        {
+            "id": PROFILE,
+            "name": "Every day",
+            "slots": [
+                {"id": "night", "start": "00:00", "setpoint": 17.0},
+                {"id": "day", "start": "08:00", "setpoint": 20.0},
+                {"id": "evening", "start": "16:00", "setpoint": 21.0},
+            ],
+        }
+    ]
+    assert attributes[Attr.WEEK] == [PROFILE] * 7
+    assert attributes[Attr.TODAY_PROFILE] == PROFILE
+    assert attributes[Attr.ACTIVE_SLOT] == "day"
 
 
 async def test_follows_slot_starts(
@@ -297,7 +323,7 @@ async def test_knobs_apply_at_once(
 async def test_slot_services(
     hass: HomeAssistant, entry: MockConfigEntry, thermostat: FakeThermostat
 ) -> None:
-    base = {Field.CONFIG_ENTRY_ID: entry.entry_id}
+    base = {Field.CONFIG_ENTRY_ID: entry.entry_id, Field.PROFILE_ID: PROFILE}
     await hass.services.async_call(
         DOMAIN,
         Service.SET_SLOT,
@@ -314,7 +340,7 @@ async def test_slot_services(
         blocking=True,
     )
     assert thermostat.setpoint == 22.0
-    slots = runtime(entry).state.slots
+    slots = runtime(entry).state.profiles[0].slots
     assert [slot.start.strftime("%H:%M") for slot in slots] == ["00:00", "09:30", "10:00", "16:00"]
 
     added = slots[2].id
@@ -322,7 +348,7 @@ async def test_slot_services(
         DOMAIN, Service.REMOVE_SLOT, {**base, Field.SLOT_ID: added}, blocking=True
     )
     assert thermostat.setpoint == 19.5
-    assert len(entry.options["slots"]) == 3
+    assert len(entry.options["profiles"][0]["slots"]) == 3
 
     with pytest.raises(ServiceValidationError) as duplicate:
         await hass.services.async_call(
@@ -496,24 +522,45 @@ async def test_schedule_ends_boost(
     assert not is_on(hass, entry, EntityKey.BOOST)
 
 
-async def test_migrates_entries_without_boost(
-    hass: HomeAssistant, thermostat: FakeThermostat, freezer: FrozenDateTimeFactory
-) -> None:
-    freezer.move_to(local(10, 0))
-    old = make_entry(())
-    options = {key: value for key, value in old.options.items() if key != "boost"}
-    legacy = MockConfigEntry(
+def legacy_entry(minor_version: int) -> MockConfigEntry:
+    """An entry as 1.1 (no boost) or 1.2 (boost, plain slots) stored it."""
+    current = make_entry(())
+    options = {
+        key: value for key, value in current.options.items() if key not in ("profiles", "week")
+    }
+    options["slots"] = current.options["profiles"][0]["slots"]
+    if minor_version < 2:
+        del options["boost"]
+    return MockConfigEntry(
         domain=DOMAIN,
-        title=old.title,
-        unique_id=old.unique_id,
-        data=dict(old.data),
+        title=current.title,
+        unique_id=current.unique_id,
+        data=dict(current.data),
         options=options,
         version=1,
-        minor_version=1,
+        minor_version=minor_version,
     )
+
+
+@pytest.mark.parametrize("minor_version", [1, 2])
+async def test_migrates_slots_to_one_profile_for_every_day(
+    hass: HomeAssistant,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+    minor_version: int,
+) -> None:
+    freezer.move_to(local(10, 0))
+    legacy = legacy_entry(minor_version)
+    old_slots = legacy.options["slots"]
     legacy.add_to_hass(hass)
     assert await hass.config_entries.async_setup(legacy.entry_id)
     await hass.async_block_till_done()
-    assert legacy.minor_version == 2
+    assert legacy.minor_version == 3
     assert legacy.options["boost"] is None
+    assert "slots" not in legacy.options
+    state = StoredState.model_validate(legacy.options)
+    assert [profile.id for profile in state.profiles] == [INITIAL_PROFILE_ID]
+    assert state.profiles[0].name == INITIAL_PROFILE_NAME
+    assert [slot.model_dump(mode="json") for slot in state.profiles[0].slots] == old_slots
+    assert state.week == (INITIAL_PROFILE_ID,) * 7
     assert thermostat.setpoint == 20.0

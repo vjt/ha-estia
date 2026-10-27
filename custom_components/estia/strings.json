@@ -92,6 +92,9 @@
     },
     "entry_not_loaded": {
       "message": "{entry_id} is not a loaded Estia schedule."
+    },
+    "unknown_profile": {
+      "message": "No profile with id {profile_id}."
     }
   },
   "services": {
@@ -103,13 +106,17 @@
           "name": "Schedule",
           "description": "The Estia schedule to edit."
         },
+        "profile_id": {
+          "name": "Profile",
+          "description": "Id of the profile, from the mode sensor's profiles attribute."
+        },
         "slot_id": {
           "name": "Slot",
-          "description": "Id of the slot, from the mode sensor's slots attribute."
+          "description": "Id of the slot, from the mode sensor's profiles attribute."
         },
         "start": {
           "name": "Start",
-          "description": "When the slot starts, every day."
+          "description": "When the slot starts, on the days that use the profile."
         },
         "setpoint": {
           "name": "Setpoint",
@@ -119,15 +126,19 @@
     },
     "add_slot": {
       "name": "Add slot",
-      "description": "Adds a daily slot.",
+      "description": "Adds a slot to a profile.",
       "fields": {
         "config_entry_id": {
           "name": "Schedule",
           "description": "The Estia schedule to edit."
         },
+        "profile_id": {
+          "name": "Profile",
+          "description": "Id of the profile, from the mode sensor's profiles attribute."
+        },
         "start": {
           "name": "Start",
-          "description": "When the slot starts, every day."
+          "description": "When the slot starts, on the days that use the profile."
         },
         "setpoint": {
           "name": "Setpoint",
@@ -137,15 +148,19 @@
     },
     "remove_slot": {
       "name": "Remove slot",
-      "description": "Removes a daily slot.",
+      "description": "Removes a slot from a profile.",
       "fields": {
         "config_entry_id": {
           "name": "Schedule",
           "description": "The Estia schedule to edit."
         },
+        "profile_id": {
+          "name": "Profile",
+          "description": "Id of the profile, from the mode sensor's profiles attribute."
+        },
         "slot_id": {
           "name": "Slot",
-          "description": "Id of the slot, from the mode sensor's slots attribute."
+          "description": "Id of the slot, from the mode sensor's profiles attribute."
         }
       }
     },

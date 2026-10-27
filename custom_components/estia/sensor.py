@@ -14,7 +14,7 @@ from .const import SETPOINT_MAX, SETPOINT_MIN, SETPOINT_STEP, Attr, EntityKey, M
 from .entity import EstiaEntity
 from .proximity import tracked_entity
 from .runtime import EstiaConfigEntry
-from .scheduler import active_slot, sorted_slots
+from .scheduler import Profile, active_slot, sorted_slots
 
 
 async def async_setup_entry(
@@ -42,14 +42,14 @@ class ModeSensor(EstiaEntity, SensorEntity):
     def _attributes(self) -> dict[str, Any]:
         runtime = self._runtime
         state = runtime.state
-        active = active_slot(state.slots, dt_util.now())
+        now = dt_util.now()
+        active = active_slot(state.profiles, state.week, now)
         decision = runtime.decision
         registry = er.async_get(self.hass)
         return {
-            Attr.SLOTS: [
-                {"id": slot.id, "start": slot.start.strftime("%H:%M"), "setpoint": slot.setpoint}
-                for slot in sorted_slots(state.slots)
-            ],
+            Attr.PROFILES: [_profile_attribute(profile) for profile in state.profiles],
+            Attr.WEEK: list(state.week),
+            Attr.TODAY_PROFILE: state.week[now.weekday()],
             Attr.ACTIVE_SLOT: active.id if active is not None else None,
             Attr.HOLD_UNTIL: state.hold_until.isoformat() if state.hold_until else None,
             Attr.BOOST_UNTIL: state.boost.until.isoformat() if state.boost else None,
@@ -65,3 +65,14 @@ class ModeSensor(EstiaEntity, SensorEntity):
             Attr.SETPOINT_MAX: SETPOINT_MAX,
             Attr.SETPOINT_STEP: SETPOINT_STEP,
         }
+
+
+def _profile_attribute(profile: Profile) -> dict[str, Any]:
+    return {
+        "id": profile.id,
+        "name": profile.name,
+        "slots": [
+            {"id": slot.id, "start": slot.start.strftime("%H:%M"), "setpoint": slot.setpoint}
+            for slot in sorted_slots(profile.slots)
+        ],
+    }

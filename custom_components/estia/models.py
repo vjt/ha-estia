@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .const import Mode
-from .scheduler import Slot
+from .scheduler import Profile, check_week
 
 
 class TravellerSensors(BaseModel):
@@ -51,7 +51,9 @@ class StoredState(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    slots: tuple[Slot, ...]
+    profiles: tuple[Profile, ...]
+    # The id of the profile each weekday uses, Monday first.
+    week: tuple[str, ...]
     schedule_enabled: bool
     preheat_enabled: bool
     away_setpoint: float
@@ -60,3 +62,8 @@ class StoredState(BaseModel):
     hold_until: datetime | None
     boost: Boost | None
     mode: Mode | None
+
+    @model_validator(mode="after")
+    def _valid_week(self) -> StoredState:
+        check_week(self.profiles, self.week)
+        return self
