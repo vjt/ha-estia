@@ -18,7 +18,17 @@ import {
   setpointColor,
   snap,
 } from "./schedule";
-import type { CardConfig, HassEntity, HomeAssistant, Mode, Schedule, Slot, Traveller } from "./types";
+import {
+  WEEKDAYS,
+  type CardConfig,
+  type HassEntity,
+  type HomeAssistant,
+  type Mode,
+  type Profile,
+  type Schedule,
+  type Slot,
+  type Traveller,
+} from "./types";
 
 const LONG_PRESS_MS = 550;
 const SETPOINT_DEBOUNCE_MS = 900;
@@ -44,6 +54,12 @@ interface Drag {
   min: number;
   max: number;
   bar: DOMRect;
+}
+
+/** The profile name being typed, for a new profile or a rename. */
+interface Naming {
+  kind: "add" | "rename";
+  value: string;
 }
 
 interface PendingSetpoint {
@@ -89,6 +105,9 @@ export class EstiaCard extends LitElement {
     _armedDelete: { state: true },
     _error: { state: true },
     _editing: { state: true },
+    _profile: { state: true },
+    _naming: { state: true },
+    _armedProfile: { state: true },
   };
 
   declare hass: HomeAssistant | undefined;
@@ -99,6 +118,9 @@ export class EstiaCard extends LitElement {
   declare _armedDelete: string | null;
   declare _error: string | null;
   declare _editing: boolean;
+  declare _profile: string | null;
+  declare _naming: Naming | null;
+  declare _armedProfile: boolean;
 
   private _clock: number | undefined;
   private readonly _native = new NativeCards(() => this.requestUpdate());
@@ -115,6 +137,9 @@ export class EstiaCard extends LitElement {
     this._armedDelete = null;
     this._error = null;
     this._editing = false;
+    this._profile = null;
+    this._naming = null;
+    this._armedProfile = false;
   }
 
   setConfig(config: CardConfig): void {
@@ -166,9 +191,20 @@ export class EstiaCard extends LitElement {
     }
   }
 
+  /** The profile on display: the one picked, else today's. */
+  private _shownProfile(schedule: Schedule): Profile {
+    const id = this._profile ?? schedule.todayProfile;
+    const profile =
+      schedule.profiles.find((candidate) => candidate.id === id) ??
+      schedule.profiles.find((candidate) => candidate.id === schedule.todayProfile);
+    if (profile === undefined) throw new Error(`unknown profile ${schedule.todayProfile}`);
+    return profile;
+  }
+
   private _setSlot(schedule: Schedule, slot: Slot, start: number, setpoint: number): Promise<void> {
     return this._call(DOMAIN, "set_slot", {
       config_entry_id: schedule.configEntryId,
+      profile_id: this._shownProfile(schedule).id,
       slot_id: slot.id,
       start: formatTime(start),
       setpoint,
@@ -183,7 +219,7 @@ export class EstiaCard extends LitElement {
     const bar = (event.currentTarget as HTMLElement).parentElement;
     if (bar === null) return;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-    const bounds = dragBounds(schedule.slots, slot.id);
+    const bounds = dragBounds(this._shownProfile(schedule).slots, slot.id);
     this._drag = { id: slot.id, start: slot.start, ...bounds, bar: bar.getBoundingClientRect() };
     this._selected = slot.id;
   }
@@ -199,7 +235,7 @@ export class EstiaCard extends LitElement {
   private async _onHandleUp(schedule: Schedule): Promise<void> {
     const drag = this._drag;
     if (drag === null) return;
-    const slot = schedule.slots.find((candidate) => candidate.id === drag.id);
+    const slot = this._shownProfile(schedule).slots.find((candidate) => candidate.id === drag.id);
     if (slot !== undefined && drag.start !== slot.start) {
       await this._setSlot(schedule, slot, drag.start, slot.setpoint);
     }
@@ -268,12 +304,13 @@ export class EstiaCard extends LitElement {
     this._selected = null;
     await this._call(DOMAIN, "remove_slot", {
       config_entry_id: schedule.configEntryId,
+      profile_id: this._shownProfile(schedule).id,
       slot_id: slot.id,
     });
   }
 
   private async _add(schedule: Schedule, climate: HassEntity | undefined): Promise<void> {
-    const start = newSlotStart(schedule.slots);
+    const start = newSlotStart(this._shownProfile(schedule).slots);
     if (start === null) {
       this._error = strings(this.hass?.language ?? "en").full;
       return;
@@ -281,9 +318,60 @@ export class EstiaCard extends LitElement {
     const setpoint = numberAttr(climate, "temperature") ?? schedule.target ?? schedule.setpointMin;
     await this._call(DOMAIN, "add_slot", {
       config_entry_id: schedule.configEntryId,
+      profile_id: this._shownProfile(schedule).id,
       start: formatTime(start),
       setpoint,
     });
+  }
+
+  // -- profiles --------------------------------------------------------------
+
+  private _pickProfile(id: string): void {
+    this._profile = id;
+    this._selected = null;
+    this._armedDelete = null;
+    this._armedProfile = false;
+    this._naming = null;
+  }
+
+  private async _assignDay(schedule: Schedule, day: string): Promise<void> {
+    await this._call(DOMAIN, "assign_day", {
+      config_entry_id: schedule.configEntryId,
+      profile_id: this._shownProfile(schedule).id,
+      day,
+    });
+  }
+
+  private async _saveName(schedule: Schedule, naming: Naming): Promise<void> {
+    const name = naming.value.trim();
+    if (name === "") return;
+    const profile = this._shownProfile(schedule);
+    this._naming = null;
+    if (naming.kind === "rename") {
+      await this._call(DOMAIN, "rename_profile", {
+        config_entry_id: schedule.configEntryId,
+        profile_id: profile.id,
+        name,
+      });
+      return;
+    }
+    await this._call(DOMAIN, "add_profile", {
+      config_entry_id: schedule.configEntryId,
+      name,
+      copy_from: profile.id,
+    });
+  }
+
+  private async _deleteProfile(schedule: Schedule): Promise<void> {
+    if (!this._armedProfile) {
+      this._armedProfile = true;
+      return;
+    }
+    const id = this._shownProfile(schedule).id;
+    this._armedProfile = false;
+    this._profile = null;
+    this._selected = null;
+    await this._call(DOMAIN, "remove_profile", { config_entry_id: schedule.configEntryId, profile_id: id });
   }
 
   // -- rendering -------------------------------------------------------------
@@ -302,7 +390,8 @@ export class EstiaCard extends LitElement {
       return html`<ha-card><div class="message error">${this._config.entity}: ${String(error)}</div></ha-card>`;
     }
     const climate = this.hass.states[schedule.climate];
-    const slots = this._withDrag(schedule.slots);
+    const profile = this._shownProfile(schedule);
+    const slots = this._withDrag(profile.slots);
     const selected = this._editing ? slots.find((slot) => slot.id === this._selected) : undefined;
     return html`
       <ha-card>
@@ -316,7 +405,8 @@ export class EstiaCard extends LitElement {
             ${this._editing ? t.done : t.edit}
           </button>
         </div>
-        ${this._renderTimeline(schedule, slots, t)}
+        ${this._renderProfiles(schedule, profile, t)} ${this._renderWeek(schedule, profile, t)}
+        ${this._renderTimeline(schedule, slots, profile.id === schedule.todayProfile, t)}
         ${selected === undefined ? nothing : this._renderEditor(schedule, selected, t)}
         ${this._editing ? nothing : this._renderSummary(schedule, t)}
       </ha-card>
@@ -328,6 +418,8 @@ export class EstiaCard extends LitElement {
     this._editing = !this._editing;
     this._selected = null;
     this._armedDelete = null;
+    this._armedProfile = false;
+    this._naming = null;
   }
 
   /** Slots with the one being dragged at its provisional start. */
@@ -445,7 +537,85 @@ export class EstiaCard extends LitElement {
     </div>`;
   }
 
-  private _renderTimeline(schedule: Schedule, slots: Slot[], t: ReturnType<typeof strings>): TemplateResult {
+  /** Chips to pick the profile on display; in edit mode, add/rename/delete. */
+  private _renderProfiles(schedule: Schedule, shown: Profile, t: ReturnType<typeof strings>): TemplateResult {
+    const inUse = schedule.week.includes(shown.id);
+    const last = schedule.profiles.length === 1;
+    const naming = this._naming;
+    return html`
+      <div class="chips" role="group" aria-label=${t.profiles}>
+        ${schedule.profiles.map(
+          (profile) => html`<button
+            class="chip ${profile.id === shown.id ? "active" : ""}"
+            @click=${() => this._pickProfile(profile.id)}
+          >
+            ${profile.name}${profile.id === schedule.todayProfile ? html` <span class="dot">●</span>` : nothing}
+          </button>`,
+        )}
+      </div>
+      ${this._editing
+        ? naming === null
+          ? html`<div class="profile-tools">
+              <button @click=${() => (this._naming = { kind: "add", value: "" })}>${t.addProfile}</button>
+              <button @click=${() => (this._naming = { kind: "rename", value: shown.name })}>
+                ${t.renameProfile}
+              </button>
+              <button
+                class="delete ${this._armedProfile ? "armed" : ""}"
+                ?disabled=${inUse || last}
+                title=${inUse || last ? t.profileInUse : t.deleteProfile}
+                @click=${() => this._deleteProfile(schedule)}
+              >
+                ${this._armedProfile ? t.confirmDelete : t.deleteProfile}
+              </button>
+            </div>`
+          : html`<div class="profile-tools">
+              <input
+                type="text"
+                placeholder=${t.profileName}
+                .value=${naming.value}
+                @input=${(event: Event) =>
+                  (this._naming = { kind: naming.kind, value: (event.target as HTMLInputElement).value })}
+              />
+              <button class="primary" @click=${() => this._saveName(schedule, naming)}>${t.save}</button>
+              <button @click=${() => (this._naming = null)}>${t.cancel}</button>
+            </div>`
+        : nothing}
+    `;
+  }
+
+  /** The seven weekdays with the profile each uses; in edit mode, tapping a
+   * day gives it the profile on display. */
+  private _renderWeek(schedule: Schedule, shown: Profile, t: ReturnType<typeof strings>): TemplateResult {
+    const language = this.hass?.language ?? "en";
+    const format = new Intl.DateTimeFormat(language, { weekday: "short" });
+    const today = (new Date().getDay() + 6) % 7; // Date counts from Sunday
+    return html`<div class="chips week" role="group" aria-label=${t.days}>
+      ${WEEKDAYS.map((day, index) => {
+        const id = schedule.week[index];
+        const profile = schedule.profiles.find((candidate) => candidate.id === id);
+        if (profile === undefined) throw new Error(`unknown profile ${id}`);
+        // 2026-10-26 is a Monday.
+        const label = format.format(new Date(2026, 9, 26 + index));
+        return html`<button
+          class="chip day ${id === shown.id ? "active" : ""} ${index === today ? "today" : ""}"
+          ?disabled=${!this._editing}
+          title=${index === today ? `${label} (${t.today})` : label}
+          @click=${() => this._assignDay(schedule, day)}
+        >
+          <span class="day-name">${label}</span>
+          <span class="day-profile">${profile.name}</span>
+        </button>`;
+      })}
+    </div>`;
+  }
+
+  private _renderTimeline(
+    schedule: Schedule,
+    slots: Slot[],
+    isToday: boolean,
+    t: ReturnType<typeof strings>,
+  ): TemplateResult {
     // Read-only unless editing: no listeners and no touch capture, so a
     // finger on the bar scrolls the page like anywhere else.
     const editing = this._editing;
@@ -458,7 +628,7 @@ export class EstiaCard extends LitElement {
           ${slots.length === 0 ? html`<div class="empty">${t.noSlots}</div>` : nothing}
           ${segments(slots).map((segment) => {
             const slot = segment.slot;
-            const active = slot.id === schedule.activeSlot;
+            const active = isToday && slot.id === schedule.activeSlot;
             const pending = this._shown(slot);
             return html`<div
               class="segment ${active ? "active" : ""} ${slot.id === this._selected ? "selected" : ""}"
@@ -484,7 +654,7 @@ export class EstiaCard extends LitElement {
               ${this._drag?.id === slot.id ? html`<span class="tip">${formatTime(slot.start)}</span>` : nothing}
             </div>`,
           )}
-          <div class="now" style="left:${percent(now)}"></div>
+          ${isToday ? html`<div class="now" style="left:${percent(now)}"></div>` : nothing}
         </div>
         <div class="ticks">
           ${[0, 6, 12, 18, 24].map((hour) => html`<span style="left:${percent(hour * 60)}">${hour}</span>`)}
@@ -676,6 +846,67 @@ export class EstiaCard extends LitElement {
       gap: 6px;
       margin-top: 12px;
       font-size: 1em;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .chip {
+      min-height: 40px;
+      border: 2px solid transparent;
+    }
+    .chip.active {
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+    .chip .dot {
+      font-size: 0.6em;
+      vertical-align: middle;
+    }
+    .week {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+    .day {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 6px 2px;
+      border-radius: 12px;
+      min-width: 0;
+    }
+    .day:disabled {
+      cursor: default;
+      opacity: 1;
+    }
+    .day.today .day-name {
+      text-decoration: underline;
+    }
+    .day-name {
+      font-weight: 500;
+    }
+    .day-profile {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.8em;
+    }
+    .profile-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .profile-tools input {
+      flex: 1 1 160px;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
     }
     .secondary {
       color: var(--secondary-text-color);

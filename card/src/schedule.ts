@@ -6,9 +6,11 @@ import {
   type HassEntity,
   type HomeAssistant,
   type Mode,
+  type Profile,
   type Schedule,
   type Slot,
   type Traveller,
+  WEEKDAYS,
 } from "./types";
 
 export const DAY = 24 * 60;
@@ -70,14 +72,28 @@ function parseMode(state: string): Mode | null {
 
 export function parseSchedule(entity: HassEntity): Schedule {
   const a = entity.attributes;
-  const slots: Slot[] = asArray(field(a, "slots"), "slots").map((raw, index) => {
-    const slot = asRecord(raw, `slot ${index}`);
+  const profiles: Profile[] = asArray(field(a, "profiles"), "profiles").map((raw, index) => {
+    const profile = asRecord(raw, `profile ${index}`);
+    const slots: Slot[] = asArray(field(profile, "slots"), `profile ${index} slots`).map((rawSlot) => {
+      const slot = asRecord(rawSlot, `profile ${index} slot`);
+      return {
+        id: asString(field(slot, "id"), "slot id"),
+        start: parseTime(asString(field(slot, "start"), "slot start")),
+        setpoint: asNumber(field(slot, "setpoint"), "slot setpoint"),
+      };
+    });
     return {
-      id: asString(field(slot, "id"), "slot id"),
-      start: parseTime(asString(field(slot, "start"), "slot start")),
-      setpoint: asNumber(field(slot, "setpoint"), "slot setpoint"),
+      id: asString(field(profile, "id"), "profile id"),
+      name: asString(field(profile, "name"), "profile name"),
+      slots: slots.sort((x, y) => x.start - y.start),
     };
   });
+  const week = asArray(field(a, "week"), "week").map((id) => asString(id, "week entry"));
+  if (week.length !== WEEKDAYS.length) throw new ScheduleError(`week has ${week.length} days`);
+  const todayProfile = asString(field(a, "today_profile"), "today_profile");
+  for (const id of [...week, todayProfile]) {
+    if (!profiles.some((profile) => profile.id === id)) throw new ScheduleError(`unknown profile ${id}`);
+  }
   const proximity: Traveller[] = asArray(field(a, "proximity"), "proximity").map((raw, index) => {
     const pair = asRecord(raw, `proximity ${index}`);
     return {
@@ -91,7 +107,9 @@ export function parseSchedule(entity: HassEntity): Schedule {
   const target = field(a, "target");
   return {
     mode: parseMode(entity.state),
-    slots: slots.sort((x, y) => x.start - y.start),
+    profiles,
+    week,
+    todayProfile,
     activeSlot: asNullableString(field(a, "active_slot"), "active_slot"),
     holdUntil: hold === null ? null : new Date(hold),
     boostUntil: boost === null ? null : new Date(boost),
