@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Settings shown as a summary**: the timeline and a line each for away and
   preheat; *Edit* unlocks dragging, the slot editor and the settings, so a
   scroll on the phone no longer moves a slot.
+- **Temperature chart with heating bands**: the panel's history is Estia's
+  own chart (room and target temperature over 24 h / 7 / 30 days, with a
+  cursor) shading the stretches when heating was probably on: heat mode and
+  target above the room. An estimate, and labelled so, for thermostats that
+  do not report `hvac_action` (the tado Smart Thermostat X over Matter does
+  not).
 - **Travellers read like sentences**: "🏠 Alice is home", "🚗 Alice is
   12.4 km away, heading home", "🏃 … moving away", "📍 … not moving", named
   after the person Proximity tracks (resolved from its registry entry; the

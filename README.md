@@ -106,7 +106,10 @@ Two slots cannot start at the same time.
 Each schedule gets its own **sidebar item**, titled after its device (rename
 the device or the entry to rename it): Home Assistant's thermostat card to
 set the temperature by hand, the schedule card, and the temperature history
-over 24 hours, 7 or 30 days. Nothing to configure.
+over 24 hours, 7 or 30 days, with the stretches when the heating was
+probably on shaded (heat mode and target above the room: an estimate, for
+thermostats that do not report when they call for heat). Nothing to
+configure.
 
 The card is bundled with the integration and loaded automatically; there is
 no separate resource to add. To put it on a dashboard as well:

@@ -4,6 +4,7 @@
 
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 
+import "./estia-history";
 import { strings } from "./i18n";
 import { NativeCards } from "./native";
 import type { CardConfig, HomeAssistant } from "./types";
@@ -102,17 +103,6 @@ export class EstiaPanel extends LitElement {
     const climate = entity === null ? undefined : hass.states[entity]?.attributes.climate_entity;
     const thermostat =
       typeof climate === "string" ? this._native.get({ type: "thermostat", entity: climate }, hass) : null;
-    const history =
-      typeof climate === "string"
-        ? this._native.get(
-            {
-              type: "history-graph",
-              hours_to_show: this._hours,
-              entities: [{ entity: climate, name: " " }],
-            },
-            hass,
-          )
-        : null;
     return html`
       <div class="toolbar">
         <ha-menu-button .hass=${hass} .narrow=${this.narrow}></ha-menu-button>
@@ -137,7 +127,9 @@ export class EstiaPanel extends LitElement {
                   </button>`,
                 )}
               </div>
-              ${history ?? nothing}
+              ${typeof climate === "string"
+                ? html`<estia-history .hass=${hass} .entity=${climate} .hours=${this._hours}></estia-history>`
+                : nothing}
             </div>
           </div>`}
     `;

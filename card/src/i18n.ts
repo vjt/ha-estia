@@ -24,6 +24,9 @@ interface Strings {
   preheatSummary: (km: string) => string;
   preheatOff: string;
   history: string;
+  roomTemperature: string;
+  targetTemperature: string;
+  heatingEstimate: string;
   periods: { hours: number; label: string }[];
   preheat: string;
   awaySetpoint: string;
@@ -75,6 +78,9 @@ const EN: Strings = {
   preheatSummary: (km) => `Preheat: within ${km} km when someone is heading home`,
   preheatOff: "Preheat off",
   history: "Temperature",
+  roomTemperature: "Room",
+  targetTemperature: "Target",
+  heatingEstimate: "Heating (estimated)",
   periods: [
     { hours: 24, label: "24 hours" },
     { hours: 168, label: "7 days" },
@@ -130,6 +136,9 @@ const IT: Strings = {
   preheatSummary: (km) => `Preriscaldo: entro ${km} km se qualcuno sta tornando`,
   preheatOff: "Preriscaldo spento",
   history: "Temperatura",
+  roomTemperature: "Ambiente",
+  targetTemperature: "Obiettivo",
+  heatingEstimate: "Riscaldamento (stima)",
   periods: [
     { hours: 24, label: "24 ore" },
     { hours: 168, label: "7 giorni" },
