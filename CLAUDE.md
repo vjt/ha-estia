@@ -198,7 +198,7 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
 - Neutral, professional register in code, commits, README, issues.
   Commit messages in English, Conventional Commits.
 - Migration to Estia done 2026-10-27 (old YAML, helpers, dashboard removed;
-  last states in `.migration/`, gitignored). ha-config changes go through
+  backups deleted 2026-10-27 at vjt's request). ha-config changes go through
   its own repo and `scripts/push.sh`.
 
 ## Release
