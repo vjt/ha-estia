@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.1 — 2026-10-28
+
+### Fixed
+
+- **No more "heating lowered" on arrival.** Proximity reports *arrived* in
+  the same instant as a distance of 0, while a presence sensor built as a
+  template on the person entities turns on a moment later. In between the
+  house looked empty with nobody heading home: Estia went away for about
+  two seconds and the away notification fired. Arrived now counts as coming
+  back, like heading home.
+
 ## 0.3.0 — 2026-10-27
 
 ### Breaking
