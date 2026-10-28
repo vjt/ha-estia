@@ -170,6 +170,13 @@ def _is_empty(snapshot: Snapshot, now: datetime) -> bool:
     return snapshot.empty_since is not None and now - snapshot.empty_since >= snapshot.away_delay
 
 
+# Arrived counts as coming back: on arrival proximity reports it in the same
+# tick as distance 0, and the presence sensor (often a template on top of
+# person entities) can turn on a tick later; in between the house would look
+# empty with no one on the way, and go away for a moment.
+_COMING_BACK = frozenset({Direction.TOWARDS, Direction.ARRIVED})
+
+
 def _someone_coming_back(snapshot: Snapshot) -> bool:
     if not snapshot.preheat_enabled:
         return False
@@ -177,7 +184,7 @@ def _someone_coming_back(snapshot: Snapshot) -> bool:
     return any(
         traveller.distance_m is not None
         and traveller.distance_m < radius_m
-        and traveller.direction is Direction.TOWARDS
+        and traveller.direction in _COMING_BACK
         for traveller in snapshot.travellers
     )
 

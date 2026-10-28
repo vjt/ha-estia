@@ -37,6 +37,8 @@ SLOTS = (EVENING, MORNING, NIGHT, DAY)  # deliberately unsorted
 NEAR_TOWARDS = Traveller(distance_m=5_000.0, direction=Direction.TOWARDS)
 NEAR_STATIONARY = Traveller(distance_m=5_000.0, direction=Direction.STATIONARY)
 FAR_TOWARDS = Traveller(distance_m=50_000.0, direction=Direction.TOWARDS)
+# Proximity on arrival: distance 0 and direction arrived in the same tick.
+ARRIVED = Traveller(distance_m=0.0, direction=Direction.ARRIVED)
 UNKNOWN = Traveller(distance_m=None, direction=None)
 
 
@@ -131,6 +133,13 @@ def test_active_slot_none_without_slots() -> None:
         # Away, someone near and coming home: preheat to the slot.
         (
             snapshot(empty_since=at(8, 0), travellers=(FAR_TOWARDS, NEAR_TOWARDS)),
+            at(10, 0),
+            Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
+        ),
+        # Arriving: proximity says arrived before the presence sensor turns on
+        # (a template a tick behind); still coming back, not away.
+        (
+            snapshot(empty_since=at(8, 0), travellers=(ARRIVED,)),
             at(10, 0),
             Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
         ),

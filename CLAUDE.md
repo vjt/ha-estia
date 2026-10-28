@@ -62,7 +62,10 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   earlier day that has any. Duplicate start times in a profile rejected.
 - Away: presence `off` for `delay` minutes → away setpoint over all.
 - Preheat: enabled and any traveller closer than `radius` km **and**
-  direction `towards` → slots apply with the house empty.
+  direction `towards` or `arrived` → slots apply with the house empty.
+  `arrived` (vjt 2026-10-28): proximity reports it a tick before the
+  presence template turns on, which went away for 2 s and notified. No
+  distance-only rule: it would preheat for someone stationary nearby.
 - Manual hold: a setpoint change whose context has no `parent_id`,
   schedule on → hold until the next slot start strictly after now
   (the first start of the following days, each with its profile; now + 1
