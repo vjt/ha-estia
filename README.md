@@ -123,6 +123,8 @@ probably on shaded (heat mode and target above the room: an estimate, for
 thermostats that do not report when they call for heat). Nothing to
 configure.
 
+<img src="docs/panel-phone.png" alt="The panel on a phone: thermostat, actions, schedule and who is on the way home" width="320">
+
 The card is bundled with the integration and loaded automatically; there is
 no separate resource to add. To put it on a dashboard as well:
 
@@ -169,82 +171,89 @@ What this means today:
   others.
 - **No house-wide controls.** *All off* and *Boost* act on one thermostat.
 - **One sidebar item per thermostat**, titled after its device.
-- **Events carry `config_entry_id`.** The notification example below fires
+- **Events carry `config_entry_id`.** The example automations below fire
   for every thermostat; filter on `config_entry_id` (the mode sensor's
-  attribute) if you want it for one only.
+  attribute) if you want them for one only.
 
 Estia has been built and tested with a single thermostat. A shared panel
 with a room picker, house-wide *All off* / *Boost* and per-house
 notifications would be the way to grow it; patches welcome.
 
-## Notifications
+## Example automations
 
-The integration fires events instead of sending notifications. This
-automation sends the four usual ones; replace `notify.notify` with your own
-notify service.
+The integration fires events instead of sending notifications, so what to
+say, and to whom, is up to your automations. These are the ones running at
+the author's home, translated; replace `notify.notify` with your own notify
+service (a phone, or a group of them).
+
+<img src="docs/notifications.png" alt="Preheat started and Heating lowered notifications on a phone" width="480">
+
+**House empty, and someone on the way back.** One automation for both mode
+changes, so the two messages stay side by side:
 
 ```yaml
-automation:
-  - alias: Heating notifications
-    mode: queued
-    triggers:
-      - trigger: event
-        event_type: estia_mode_changed
-        event_data:
-          mode: away
-        id: away
-      - trigger: event
-        event_type: estia_mode_changed
-        event_data:
-          mode: preheat
-        id: preheat
-      - trigger: event
-        event_type: estia_off
-        id: "off"
-      - trigger: event
-        event_type: estia_resumed
-        id: resumed
-    actions:
-      - choose:
-          - conditions:
-              - condition: trigger
-                id: away
-            sequence:
-              - action: notify.notify
-                data:
-                  title: Heating lowered
-                  message: >-
-                    Nobody home: {{ trigger.event.data.away_setpoint }} °C
-                    until someone is back.
-          - conditions:
-              - condition: trigger
-                id: preheat
-            sequence:
-              - action: notify.notify
-                data:
-                  title: Preheat started
-                  message: >-
-                    Someone is on the way back: heating to the schedule,
-                    {{ trigger.event.data.target }} °C.
-          - conditions:
-              - condition: trigger
-                id: "off"
-            sequence:
-              - action: notify.notify
-                data:
-                  title: Heating off
-                  message: >-
-                    Schedule stopped and thermostat off. Turn the schedule
-                    switch back on to resume.
-          - conditions:
-              - condition: trigger
-                id: resumed
-            sequence:
-              - action: notify.notify
-                data:
-                  title: Heating resumed
-                  message: >-
-                    Schedule active again, {{ trigger.event.data.target }} °C.
+- alias: Heating - away and preheat
+  mode: queued
+  triggers:
+    - trigger: event
+      event_type: estia_mode_changed
+      event_data:
+        mode: away
+    - trigger: event
+      event_type: estia_mode_changed
+      event_data:
+        mode: preheat
+  actions:
+    - action: notify.notify
+      data:
+        title: >-
+          {{ 'Heating lowered' if trigger.event.data.mode == 'away'
+             else 'Preheat started' }}
+        message: >-
+          {% if trigger.event.data.mode == 'away' %}Nobody home:
+          {{ trigger.event.data.away_setpoint }} °C until someone is back.
+          {% else %}Someone is on the way back: heating to the schedule,
+          {{ trigger.event.data.target }} °C.{% endif %}
+```
+
+**All off**, so that whoever did not press it knows:
+
+```yaml
+- alias: Heating - off
+  mode: queued
+  triggers:
+    - trigger: event
+      event_type: estia_off
+  actions:
+    - action: notify.notify
+      data:
+        title: Heating off
+        message: Schedule stopped and thermostat off. Choose Scheduled to resume.
+```
+
+**Back on schedule**, after Scheduled is chosen again:
+
+```yaml
+- alias: Heating - resumed
+  mode: queued
+  triggers:
+    - trigger: event
+      event_type: estia_resumed
+  actions:
+    - action: notify.notify
+      data:
+        title: Heating resumed
+        message: Schedule active again, {{ trigger.event.data.target }} °C.
+```
+
+With [more than one thermostat](#more-than-one-thermostat), add the entry to
+each trigger's `event_data` to notify for one of them only:
+
+```yaml
+    - trigger: event
+      event_type: estia_off
+      event_data:
+        config_entry_id: 0123456789abcdef0123456789abcdef  # the mode sensor's config_entry_id attribute
 ```
 
 ## Development
