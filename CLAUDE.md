@@ -47,11 +47,14 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   `native.ts` loads it through `partial-panel-resolver`.
 - **Brand icon**: `brand/icon.svg` → PNGs with `rsvg-convert` (HA 2026.3+
   serves them from the integration, `/api/brands/integration/estia/…`).
-  HACS 2.0.5 (latest, 2025-01) shows no icon for Estia and nothing on our
-  side fixes it (checked 2026-10-28): its frontend only builds
-  `brands.home-assistant.io/{_/}<domain>` URLs, home-assistant/brands closes
-  custom-integration PRs since 2026.3, and its `marketplace/` path only
-  covers repos in the HACS default feed.
+  HACS 2.0.5 (latest, 2025-01) shows no icon for Estia, and nothing on our
+  side fixes it (checked 2026-10-28). Its frontend predates the 2026.3 brands
+  proxy and builds `brands.home-assistant.io/{_/}<domain>` URLs straight to the
+  CDN, never asking HA, so it shows the placeholder. Upstream bug
+  hacs/integration#5171 / #5179 was closed as fixed in *Marketplace*, the HACS
+  successor that ships with HA 2026.11. The fix is to upgrade HA. The
+  home-assistant/brands repo is deprecated for custom integrations: no PR
+  there.
 - **Events**: `estia_mode_changed`, `estia_off`, `estia_resumed`.
   Notifications are the user's automations (README example).
 - **Card**: Lit + TypeScript sources in `card/src/` (repo root, so they
