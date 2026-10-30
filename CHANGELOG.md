@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- **The heating bands include the inertia**: once the target is reached the
+  radiators stay hot and the room keeps rising. The chart now shades that too:
+  right after heating, while the room has risen by 0.3 °C/h or more over the
+  last hour (about 40° on the phone's 24 h chart). A rise with no heating
+  before it (sun, oven) is not shaded.
+
 ## 0.3.1 — 2026-10-28
 
 ### Fixed

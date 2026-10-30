@@ -119,9 +119,10 @@ Each schedule gets its own **sidebar item**, titled after its device (rename
 the device or the entry to rename it): Home Assistant's thermostat card to
 set the temperature by hand, the schedule card, and the temperature history
 over 24 hours, 7 or 30 days, with the stretches when the heating was
-probably on shaded (heat mode and target above the room: an estimate, for
-thermostats that do not report when they call for heat). Nothing to
-configure.
+probably on shaded: heat mode with the target above the room, or the room
+still rising by 0.3 °C/h or more over the last hour right after that (the
+radiators stay hot once the target is reached). An estimate, for thermostats
+that do not report when they call for heat. Nothing to configure.
 
 <img src="docs/panel-phone.png" alt="The panel on a phone: thermostat, actions, schedule and who is on the way home" width="320">
 

@@ -1,9 +1,10 @@
 // estia-history: room and target temperature over a period, with a band
-// where the heating was probably on (heat mode, target above the room).
+// where the heating was probably on (heat mode, target above the room, or the
+// room still rising right after: see heatingBands).
 
 import { LitElement, css, html, nothing, svg, type PropertyValues, type TemplateResult } from "lit";
 
-import { heatingBands, samples, ticks, type HistoryState, type Sample } from "./history";
+import { RISE_WINDOW_MS, heatingBands, sampleAt, samples, ticks, type HistoryState, type Sample } from "./history";
 import { strings } from "./i18n";
 import type { HomeAssistant } from "./types";
 
@@ -71,7 +72,9 @@ export class EstiaHistory extends LitElement {
 
   private async _load(): Promise<void> {
     if (this.hass === undefined || this.entity === undefined) return;
-    const start = new Date(Date.now() - this.hours * 3_600_000);
+    // An hour more than shown: the heating estimate at the left edge looks back
+    // over the rise window.
+    const start = new Date(Date.now() - this.hours * 3_600_000 - RISE_WINDOW_MS);
     try {
       const result = await this.hass.callWS<Record<string, HistoryState[]>>({
         type: "history/history_during_period",
@@ -99,7 +102,8 @@ export class EstiaHistory extends LitElement {
 
     const end = Date.now();
     const start = end - this.hours * 3_600_000;
-    const values = points.flatMap((p) => [p.current, p.target]).filter((v): v is number => v !== null);
+    const shown = points.filter((_, index) => index + 1 === points.length || points[index + 1].t > start);
+    const values = shown.flatMap((p) => [p.current, p.target]).filter((v): v is number => v !== null);
     const low = Math.floor(Math.min(...values, 18) - 0.5);
     const high = Math.ceil(Math.max(...values, 20) + 0.5);
     const plotW = width - PAD.left - PAD.right;
@@ -110,7 +114,7 @@ export class EstiaHistory extends LitElement {
     const step = (pick: (p: Sample) => number | null): string => {
       let d = "";
       let previous: number | null = null;
-      points.forEach((p, index) => {
+      shown.forEach((p, index) => {
         const value = pick(p);
         const tx = x(Math.max(p.t, start));
         if (value === null) {
@@ -119,14 +123,14 @@ export class EstiaHistory extends LitElement {
         }
         d += previous === null ? `M${tx},${y(value)}` : `H${tx}V${y(value)}`;
         previous = value;
-        if (index === points.length - 1) d += `H${x(end)}`;
+        if (index === shown.length - 1) d += `H${x(end)}`;
       });
       return d;
     };
 
     const bands = heatingBands(points, start, end);
     const xTicks = this._timeTicks(start, end);
-    const hoverSample = this._hover === null ? null : this._sampleAt(points, this._hover);
+    const hoverSample = this._hover === null ? null : sampleAt(points, this._hover);
     const language = this.hass.language;
     const fmt = (v: number | null): string =>
       v === null ? "—" : `${new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(v)} °C`;
@@ -165,15 +169,6 @@ export class EstiaHistory extends LitElement {
               <span><i class="swatch target"></i>${fmt(hoverSample.target)}</span>`}
       </div>
     </ha-card>`;
-  }
-
-  private _sampleAt(points: Sample[], time: number): Sample | null {
-    let found: Sample | null = null;
-    for (const p of points) {
-      if (p.t > time) break;
-      found = p;
-    }
-    return found;
   }
 
   private _onMove(event: PointerEvent, start: number, end: number, plotW: number): void {

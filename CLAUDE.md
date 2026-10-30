@@ -42,7 +42,10 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   after the device's user name, else the entry title; shows HA's native
   thermostat card (more-info hidden via adopted stylesheet), the card, and
   `estia-history` (own SVG chart; heating bands are an *estimate*: the tado
-  X over Matter never reports `hvac_action`). Native cards come from
+  X over Matter never reports `hvac_action`). Estimate (vjt 2026-10-30): target
+  above the room, or right after that the room rising ≥ 0.3 °C/h over 60 min
+  (inertia), `card/src/history.ts`, tested by `card/test/` (`npm test`). Learning
+  the time to target: later, not now. No tado cloud (ruled out). Native cards come from
   `window.loadCardHelpers`, which only exists after Lovelace code loads:
   `native.ts` loads it through `partial-panel-resolver`.
 - **Brand icon**: `brand/icon.svg` → PNGs with `rsvg-convert` (HA 2026.3+

@@ -8,7 +8,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run --silent typecheck && node scripts/build.mjs --check"
+    "test": "node scripts/test.mjs",
+    "check": "npm run --silent typecheck && npm run --silent test && node scripts/build.mjs --check"
   },
   "dependencies": {
     "lit": "3.2.1"

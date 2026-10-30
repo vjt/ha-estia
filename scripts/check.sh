@@ -19,7 +19,7 @@ echo "=== ruff format check ==="
 .venv/bin/python -m ruff format --check custom_components/ tests/
 
 echo ""
-echo "=== card: typecheck + build is committed ==="
+echo "=== card: typecheck + tests + build is committed ==="
 (cd card && npm run --silent check)
 
 echo ""
