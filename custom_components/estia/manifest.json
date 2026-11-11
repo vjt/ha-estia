@@ -11,5 +11,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/vjt/ha-estia/issues",
   "requirements": ["pydantic>=2.0"],
-  "version": "0.4.1"
+  "version": "0.4.2"
 }

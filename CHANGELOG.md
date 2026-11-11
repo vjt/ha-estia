@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.2 — 2026-11-11
+
+### Fixed
+
+- **The house can go away with someone at home.** Proximity keeps reporting
+  *arrived* (distance 0) for as long as a person stays home, and Estia counted
+  *arrived* as coming back with no time limit: with the presence sensor off
+  and a resident at home (for example a sensor that turns off when nobody
+  needs this heating) the slots applied as preheat instead of the away
+  setpoint, and the preheat notification fired. *Arrived* now counts as
+  coming back only for the away delay after the arrival, long enough for the
+  presence sensor to catch up; then the house goes away on its own. Heading
+  home is unchanged.
+
 ## 0.4.1 — 2026-11-06
 
 Packaging only: no change to the integration or the card.
