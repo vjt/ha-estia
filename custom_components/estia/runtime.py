@@ -97,7 +97,8 @@ def _max_setpoint_of(state: State | None) -> float | None:
 
 
 def _parse_traveller(hass: HomeAssistant, sensors: TravellerSensors) -> Traveller:
-    """Read a proximity pair. Unknown/unavailable/missing sensors yield None
+    """Read a proximity pair, and when the direction last changed (its
+    sensor's `last_changed`). Unknown/unavailable/missing sensors yield None
     fields; any other non-numeric distance or unknown direction raises."""
     distance = hass.states.get(sensors.distance)
     direction = hass.states.get(sensors.direction)
@@ -109,9 +110,13 @@ def _parse_traveller(hass: HomeAssistant, sensors: TravellerSensors) -> Travelle
             UnitOfLength.METERS,
         )
     direction_value: Direction | None = None
+    direction_since: datetime | None = None
     if direction is not None and direction.state not in _MISSING:
         direction_value = Direction(direction.state)
-    return Traveller(distance_m=distance_m, direction=direction_value)
+        direction_since = direction.last_changed
+    return Traveller(
+        distance_m=distance_m, direction=direction_value, direction_since=direction_since
+    )
 
 
 class EstiaRuntime:

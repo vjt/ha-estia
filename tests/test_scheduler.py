@@ -34,12 +34,19 @@ EVENING = Slot(id="c", start=time(17, 0), setpoint=21.0)
 NIGHT = Slot(id="d", start=time(22, 30), setpoint=17.0)
 SLOTS = (EVENING, MORNING, NIGHT, DAY)  # deliberately unsorted
 
-NEAR_TOWARDS = Traveller(distance_m=5_000.0, direction=Direction.TOWARDS)
-NEAR_STATIONARY = Traveller(distance_m=5_000.0, direction=Direction.STATIONARY)
-FAR_TOWARDS = Traveller(distance_m=50_000.0, direction=Direction.TOWARDS)
-# Proximity on arrival: distance 0 and direction arrived in the same tick.
-ARRIVED = Traveller(distance_m=0.0, direction=Direction.ARRIVED)
-UNKNOWN = Traveller(distance_m=None, direction=None)
+# Heading home for an hour: longer than the away delay, which does not matter.
+NEAR_TOWARDS = Traveller(distance_m=5_000.0, direction=Direction.TOWARDS, direction_since=at(9, 0))
+NEAR_STATIONARY = Traveller(
+    distance_m=5_000.0, direction=Direction.STATIONARY, direction_since=at(9, 0)
+)
+FAR_TOWARDS = Traveller(distance_m=50_000.0, direction=Direction.TOWARDS, direction_since=at(9, 0))
+UNKNOWN = Traveller(distance_m=None, direction=None, direction_since=None)
+
+
+def arrived(since: datetime | None) -> Traveller:
+    """Proximity on arrival: distance 0 and direction arrived in the same tick,
+    both kept for as long as the person stays home."""
+    return Traveller(distance_m=0.0, direction=Direction.ARRIVED, direction_since=since)
 
 
 def every_day(slots: tuple[Slot, ...]) -> tuple[tuple[Profile, ...], tuple[str, ...]]:
@@ -136,12 +143,54 @@ def test_active_slot_none_without_slots() -> None:
             at(10, 0),
             Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
         ),
-        # Arriving: proximity says arrived before the presence sensor turns on
-        # (a template a tick behind); still coming back, not away.
+        # Heading home with no known instant for it: still heading home.
         (
-            snapshot(empty_since=at(8, 0), travellers=(ARRIVED,)),
+            snapshot(
+                empty_since=at(8, 0),
+                travellers=(NEAR_TOWARDS.model_copy(update={"direction_since": None}),),
+            ),
             at(10, 0),
             Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
+        ),
+        # Arriving: proximity says arrived before the presence sensor turns on
+        # (a template a tick behind, or one with a delay); still coming back,
+        # not away...
+        (
+            snapshot(empty_since=at(8, 0), travellers=(arrived(at(10, 0)),)),
+            at(10, 0),
+            Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
+        ),
+        (
+            snapshot(empty_since=at(8, 0), travellers=(arrived(at(9, 50, 1)),)),
+            at(10, 0),
+            Decision(mode=Mode.PREHEAT, target=18.0, hold_until=None, boost_until=None),
+        ),
+        # ... for the away delay only: proximity keeps saying arrived for as
+        # long as the person is home, and a presence sensor off with someone in
+        # the house (nobody needs this heating) means away.
+        (
+            snapshot(empty_since=at(8, 0), travellers=(arrived(at(9, 50)),)),
+            at(10, 0),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
+        ),
+        (
+            snapshot(empty_since=at(9, 0), travellers=(arrived(at(7, 0)),)),
+            at(10, 0),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
+        ),
+        # Arrived, no known instant for it: not coming back.
+        (
+            snapshot(empty_since=at(8, 0), travellers=(arrived(None),)),
+            at(10, 0),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
+        ),
+        # Just arrived, preheat switched off: away.
+        (
+            snapshot(
+                empty_since=at(8, 0), travellers=(arrived(at(10, 0)),), preheat_enabled=False
+            ),
+            at(10, 0),
+            Decision(mode=Mode.AWAY, target=15.5, hold_until=None, boost_until=None),
         ),
         # Near but stationary (a day in town) does not count.
         (
@@ -304,6 +353,20 @@ def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: date
         (snapshot(empty_since=at(9, 55)), at(10, 0), at(10, 5)),
         # Already away: the delay is no longer a wakeup.
         (snapshot(empty_since=at(9, 0)), at(10, 0), at(17, 0)),
+        # A recent arrival stops counting as coming back after the away delay.
+        (snapshot(empty_since=at(8, 0), travellers=(arrived(at(9, 55)),)), at(10, 0), at(10, 5)),
+        # An arrival that no longer counts, or never did: no wakeup.
+        (snapshot(empty_since=at(8, 0), travellers=(arrived(at(9, 0)),)), at(10, 0), at(17, 0)),
+        (snapshot(empty_since=at(8, 0), travellers=(arrived(None),)), at(10, 0), at(17, 0)),
+        (
+            snapshot(
+                empty_since=at(8, 0), travellers=(arrived(at(9, 55)),), preheat_enabled=False
+            ),
+            at(10, 0),
+            at(17, 0),
+        ),
+        # Heading home has no end of its own.
+        (snapshot(empty_since=at(8, 0), travellers=(NEAR_TOWARDS,)), at(10, 0), at(17, 0)),
         # Nothing scheduled at all.
         (snapshot(plan=every_day(())), at(10, 0), None),
         # The boost ends before the next start.

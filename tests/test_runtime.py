@@ -34,6 +34,7 @@ from pytest_homeassistant_custom_component.common import (
 from custom_components.estia.card import schedule_device
 from custom_components.estia.const import (
     DOMAIN,
+    INITIAL_AWAY_DELAY_MIN,
     INITIAL_AWAY_SETPOINT,
     INITIAL_PROFILE_ID,
     Attr,
@@ -275,6 +276,53 @@ async def test_preheat_when_heading_home_within_radius(
     hass.states.async_set(DISTANCE, "25000", {ATTR_UNIT_OF_MEASUREMENT: UnitOfLength.METERS})
     await hass.async_block_till_done()
     assert mode(hass, entry) == Mode.AWAY
+
+
+async def arrive(hass: HomeAssistant) -> None:
+    """Proximity on arrival: distance 0 and arrived, kept while at home."""
+    hass.states.async_set(DISTANCE, "0", {ATTR_UNIT_OF_MEASUREMENT: UnitOfLength.METERS})
+    hass.states.async_set(DIRECTION, "arrived")
+    await hass.async_block_till_done()
+
+
+async def test_arrival_bridges_the_presence_sensor_for_the_away_delay(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    hass.states.async_set(PRESENCE, STATE_OFF)
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN))
+    assert mode(hass, entry) == Mode.AWAY
+
+    # Arrived, the presence sensor not on yet: coming back.
+    await arrive(hass)
+    assert mode(hass, entry) == Mode.PREHEAT
+    assert thermostat.setpoint == 20.0
+
+    # The presence sensor stayed off for the away delay since the arrival:
+    # away, with no other change to trigger it.
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN))
+    assert mode(hass, entry) == Mode.AWAY
+    assert thermostat.setpoint == INITIAL_AWAY_SETPOINT
+
+
+async def test_goes_away_with_someone_home_for_a_while(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """A presence sensor off with a resident at home (in a room this heating
+    does not serve): proximity still says arrived, the house goes away."""
+    await arrive(hass)
+    await advance(hass, freezer, timedelta(hours=1))
+    assert mode(hass, entry) == Mode.HOME
+
+    hass.states.async_set(PRESENCE, STATE_OFF)
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN))
+    assert mode(hass, entry) == Mode.AWAY
+    assert thermostat.setpoint == INITIAL_AWAY_SETPOINT
 
 
 async def test_schedule_off_pauses_and_ignores_manual(

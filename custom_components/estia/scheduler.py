@@ -62,7 +62,8 @@ def check_week(profiles: tuple[Profile, ...], week: tuple[str, ...]) -> None:
 
 
 class Traveller(BaseModel):
-    """A tracked person's distance from home and direction of travel.
+    """A tracked person's distance from home, direction of travel, and the
+    instant the direction last changed.
 
     `None` when the proximity sensor is unknown or unavailable.
     """
@@ -71,6 +72,7 @@ class Traveller(BaseModel):
 
     distance_m: float | None
     direction: Direction | None
+    direction_since: datetime | None
 
 
 class Snapshot(BaseModel):
@@ -170,21 +172,42 @@ def _is_empty(snapshot: Snapshot, now: datetime) -> bool:
     return snapshot.empty_since is not None and now - snapshot.empty_since >= snapshot.away_delay
 
 
-# Arrived counts as coming back: on arrival proximity reports it in the same
-# tick as distance 0, and the presence sensor (often a template on top of
-# person entities) can turn on a tick later; in between the house would look
-# empty with no one on the way, and go away for a moment.
-_COMING_BACK = frozenset({Direction.TOWARDS, Direction.ARRIVED})
+def _near(snapshot: Snapshot, traveller: Traveller) -> bool:
+    return (
+        traveller.distance_m is not None
+        and traveller.distance_m < snapshot.preheat_radius_km * 1000
+    )
 
 
-def _someone_coming_back(snapshot: Snapshot) -> bool:
+def _arrival_counts_until(snapshot: Snapshot, traveller: Traveller) -> datetime | None:
+    """Until when a traveller who arrived counts as coming back: the away
+    delay after the direction turned arrived. None when it has not arrived,
+    is not near, or the instant is unknown.
+
+    On arrival proximity reports arrived in the same tick as distance 0, and
+    the presence sensor (often a template on top of person entities, maybe
+    with a delay) can turn on later; in between the house would look empty
+    with no one on the way, and go away for a moment. Only for the away
+    delay, though: proximity keeps saying arrived for as long as the person
+    is home, and a presence sensor off with someone in the house must still
+    mean away. The house gets as long to settle after an arrival as it needs
+    to be declared empty.
+    """
+    if (
+        traveller.direction is not Direction.ARRIVED
+        or traveller.direction_since is None
+        or not _near(snapshot, traveller)
+    ):
+        return None
+    return traveller.direction_since + snapshot.away_delay
+
+
+def _someone_coming_back(snapshot: Snapshot, now: datetime) -> bool:
     if not snapshot.preheat_enabled:
         return False
-    radius_m = snapshot.preheat_radius_km * 1000
     return any(
-        traveller.distance_m is not None
-        and traveller.distance_m < radius_m
-        and traveller.direction in _COMING_BACK
+        (traveller.direction is Direction.TOWARDS and _near(snapshot, traveller))
+        or _active(_arrival_counts_until(snapshot, traveller), now)
         for traveller in snapshot.travellers
     )
 
@@ -213,7 +236,7 @@ def decide(snapshot: Snapshot, now: datetime) -> Decision:
         )
 
     empty = _is_empty(snapshot, now)
-    if empty and not _someone_coming_back(snapshot):
+    if empty and not _someone_coming_back(snapshot, now):
         return Decision(
             mode=Mode.AWAY, target=snapshot.away_setpoint, hold_until=None, boost_until=None
         )
@@ -238,7 +261,8 @@ def _active(until: datetime | None, now: datetime) -> bool:
 
 def next_wakeup(snapshot: Snapshot, now: datetime) -> datetime | None:
     """The next instant at which `decide` may change its answer without any
-    state change: a slot start, the hold expiring, the away delay elapsing.
+    state change: a slot start, the hold expiring, the away delay elapsing,
+    an arrival no longer counting as coming back.
 
     None when nothing is scheduled (or the schedule is paused or off).
     """
@@ -257,4 +281,9 @@ def next_wakeup(snapshot: Snapshot, now: datetime) -> datetime | None:
         away_at = snapshot.empty_since + snapshot.away_delay
         if away_at > now:
             candidates.append(away_at)
+    if snapshot.preheat_enabled:
+        for traveller in snapshot.travellers:
+            arrival_until = _arrival_counts_until(snapshot, traveller)
+            if arrival_until is not None and arrival_until > now:
+                candidates.append(arrival_until)
     return min(candidates) if candidates else None

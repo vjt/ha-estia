@@ -77,6 +77,11 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   `arrived` (vjt 2026-10-28): proximity reports it a tick before the
   presence template turns on, which went away for 2 s and notified. No
   distance-only rule: it would preheat for someone stationary nearby.
+  `arrived` counts only for `delay` after the direction sensor's
+  `last_changed` (vjt 2026-11-11): proximity keeps a resident at home at 0 /
+  `arrived` forever, so a presence sensor off with someone home (only rooms
+  heated otherwise occupied) went preheat instead of away. Unknown instant →
+  does not count; `next_wakeup` includes the window's end.
 - Manual hold: a setpoint change whose context has no `parent_id`,
   schedule on → hold until the next slot start strictly after now
   (the first start of the following days, each with its profile; now + 1
