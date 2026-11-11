@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.3 — 2026-11-11
+
+### Fixed
+
+- **No preheat when the house empties with someone at home.** Since 0.4.2
+  *arrived* counts as coming back for the away delay after the arrival, but it
+  did so even when the arrival came before the house was empty. A Home
+  Assistant restart resets when every sensor last changed: the presence sensor
+  turned off and, a few seconds later, proximity reported *arrived* for a
+  resident who never left. When the away delay ran out the house went to
+  preheat for those few seconds instead of away, and the preheat notification
+  fired. *Arrived* now counts only when it happens with the house already
+  empty, which is what coming back means; the house goes straight from home to
+  away. Arriving at an empty house and heading home are unchanged.
+
 ## 0.4.2 — 2026-11-11
 
 ### Fixed

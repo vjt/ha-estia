@@ -34,6 +34,8 @@ EVENING = Slot(id="c", start=time(17, 0), setpoint=21.0)
 NIGHT = Slot(id="d", start=time(22, 30), setpoint=17.0)
 SLOTS = (EVENING, MORNING, NIGHT, DAY)  # deliberately unsorted
 
+AWAY_DELAY = timedelta(minutes=10)
+
 # Heading home for an hour: longer than the away delay, which does not matter.
 NEAR_TOWARDS = Traveller(distance_m=5_000.0, direction=Direction.TOWARDS, direction_since=at(9, 0))
 NEAR_STATIONARY = Traveller(
@@ -72,7 +74,7 @@ def snapshot(
         profiles=plan[0],
         week=plan[1],
         away_setpoint=15.5,
-        away_delay=timedelta(minutes=10),
+        away_delay=AWAY_DELAY,
         preheat_enabled=preheat_enabled,
         preheat_radius_km=20.0,
         empty_since=empty_since,
@@ -358,6 +360,8 @@ def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: date
         # An arrival that no longer counts, or never did: no wakeup.
         (snapshot(empty_since=at(8, 0), travellers=(arrived(at(9, 0)),)), at(10, 0), at(17, 0)),
         (snapshot(empty_since=at(8, 0), travellers=(arrived(None),)), at(10, 0), at(17, 0)),
+        # An arrival at a house that is not empty is no one coming back.
+        (snapshot(travellers=(arrived(at(9, 55)),)), at(10, 0), at(17, 0)),
         (
             snapshot(
                 empty_since=at(8, 0), travellers=(arrived(at(9, 55)),), preheat_enabled=False
@@ -380,6 +384,80 @@ def test_hold_until_after(slots: tuple[Slot, ...], now: datetime, expected: date
 )
 def test_next_wakeup(snap: Snapshot, now: datetime, expected: datetime | None) -> None:
     assert next_wakeup(snap, now) == expected
+
+
+# -- coming back -------------------------------------------------------------
+# Decisions second by second: a mode that flips for a few seconds still fires
+# a mode change, and the user's notification with it.
+
+
+def seconds(start: datetime, end: datetime) -> list[datetime]:
+    """Every second from start (included) to end (excluded)."""
+    return [start + timedelta(seconds=s) for s in range(int((end - start).total_seconds()))]
+
+
+def test_arrival_before_the_house_is_empty_is_not_coming_back() -> None:
+    """A restart resets every sensor's last_changed: the presence sensor off
+    (a resident at home, in rooms this heating does not serve) and, a few
+    seconds later, proximity arrived for that same resident. When the house is
+    declared empty nobody is coming back: away, never preheat."""
+    presence_off = at(16, 4, 49)
+    snap = snapshot(
+        empty_since=presence_off, travellers=(arrived(presence_off + timedelta(seconds=12)),)
+    )
+    empty_at = presence_off + AWAY_DELAY
+    for now in seconds(empty_at, empty_at + timedelta(hours=1)):
+        assert decide(snap, now).mode is Mode.AWAY, now
+    # The only wakeup is the house going away, not the end of the arrival's delay.
+    assert next_wakeup(snap, presence_off + timedelta(seconds=12)) == empty_at
+    assert next_wakeup(snap, empty_at) == at(17, 0)
+
+
+def test_arrival_at_an_empty_house_is_coming_back_for_the_away_delay() -> None:
+    """Away for hours, a traveller arrives, the presence sensor is not on (yet):
+    preheat for the away delay after the arrival, then away if the presence
+    sensor never turned on."""
+    arrival = at(10, 0)
+    snap = snapshot(empty_since=at(8, 0), travellers=(arrived(arrival),))
+    window_end = arrival + AWAY_DELAY
+    for now in seconds(arrival, window_end):
+        assert decide(snap, now).mode is Mode.PREHEAT, now
+    for now in seconds(window_end, window_end + timedelta(hours=1)):
+        assert decide(snap, now).mode is Mode.AWAY, now
+    assert next_wakeup(snap, arrival) == window_end
+
+
+def test_house_emptying_long_after_an_arrival_goes_away_on_time() -> None:
+    """A resident arrived hours ago (proximity still says arrived) and the
+    presence sensor turns off: home until the away delay, then away, with no
+    preheat in between."""
+    presence_off = at(10, 0)
+    snap = snapshot(empty_since=presence_off, travellers=(arrived(at(7, 0)),))
+    empty_at = presence_off + AWAY_DELAY
+    for now in seconds(presence_off, empty_at):
+        assert decide(snap, now).mode is Mode.HOME, now
+    for now in seconds(empty_at, empty_at + timedelta(hours=1)):
+        assert decide(snap, now).mode is Mode.AWAY, now
+    assert next_wakeup(snap, presence_off) == empty_at
+
+
+@pytest.mark.parametrize(
+    "towards_since",
+    [
+        # On the way since before the house was empty...
+        at(7, 0),
+        # ... or since a moment after the presence sensor turned off.
+        at(10, 0, 12),
+    ],
+)
+def test_heading_home_preheats_an_empty_house(towards_since: datetime) -> None:
+    """Near and heading home is coming back, whenever it started."""
+    presence_off = at(10, 0)
+    traveller = NEAR_TOWARDS.model_copy(update={"direction_since": towards_since})
+    snap = snapshot(empty_since=presence_off, travellers=(traveller,))
+    empty_at = presence_off + AWAY_DELAY
+    for now in seconds(empty_at, empty_at + timedelta(hours=1)):
+        assert decide(snap, now).mode is Mode.PREHEAT, now
 
 
 # -- day profiles -----------------------------------------------------------

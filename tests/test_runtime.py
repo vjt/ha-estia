@@ -325,6 +325,30 @@ async def test_goes_away_with_someone_home_for_a_while(
     assert thermostat.setpoint == INITIAL_AWAY_SETPOINT
 
 
+async def test_arrival_while_the_house_empties_does_not_preheat(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """As after a restart: the presence sensor goes off (a resident at home, in
+    rooms this heating does not serve), then proximity says arrived for that
+    resident a few seconds later. The house goes away with no preheat first."""
+    events = async_capture_events(hass, EstiaEvent.MODE_CHANGED)
+    hass.states.async_set(PRESENCE, STATE_OFF)
+    await advance(hass, freezer, timedelta(seconds=12))
+    await arrive(hass)
+    assert mode(hass, entry) == Mode.HOME
+
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN, seconds=-12))
+    assert mode(hass, entry) == Mode.AWAY
+    assert thermostat.setpoint == INITIAL_AWAY_SETPOINT
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN))
+    assert [(e.data[Field.PREVIOUS_MODE], e.data[Field.MODE]) for e in events] == [
+        (Mode.HOME, Mode.AWAY),
+    ]
+
+
 async def test_schedule_off_pauses_and_ignores_manual(
     hass: HomeAssistant, entry: MockConfigEntry, thermostat: FakeThermostat
 ) -> None:
