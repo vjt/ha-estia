@@ -182,7 +182,8 @@ def _near(snapshot: Snapshot, traveller: Traveller) -> bool:
 def _arrival_counts_until(snapshot: Snapshot, traveller: Traveller) -> datetime | None:
     """Until when a traveller who arrived counts as coming back: the away
     delay after the direction turned arrived. None when it has not arrived,
-    is not near, or the instant is unknown.
+    is not near, the instant is unknown, or the house was not empty yet at
+    that instant.
 
     On arrival proximity reports arrived in the same tick as distance 0, and
     the presence sensor (often a template on top of person entities, maybe
@@ -192,11 +193,20 @@ def _arrival_counts_until(snapshot: Snapshot, traveller: Traveller) -> datetime 
     is home, and a presence sensor off with someone in the house must still
     mean away. The house gets as long to settle after an arrival as it needs
     to be declared empty.
+
+    And only an arrival at a house that was already empty: coming back means
+    coming back to it. Someone who arrived while the presence sensor was on,
+    or off for less than the away delay, was home when the house emptied, and
+    counting them would turn home into preheat instead of away. A restart
+    does exactly that: it resets every sensor's last_changed, so a resident
+    at home reads as arrived a few seconds before or after the presence
+    sensor went off.
     """
     if (
         traveller.direction is not Direction.ARRIVED
         or traveller.direction_since is None
         or not _near(snapshot, traveller)
+        or not _is_empty(snapshot, traveller.direction_since)
     ):
         return None
     return traveller.direction_since + snapshot.away_delay

@@ -21,9 +21,10 @@ of the hearth.
 - **Preheat**: when someone tracked by the Proximity integration is closer than
   the preheat radius **and** heading home, the slots apply even with the house
   empty. Being near but stationary (a day in town) does not count. Someone who
-  has just arrived counts too, for the away delay, while the presence sensor
-  catches up; after that a presence sensor that is off means away, even with
-  someone at home.
+  has just arrived at the empty house counts too, for the away delay, while the
+  presence sensor catches up; after that a presence sensor that is off means
+  away, even with someone at home. Someone who arrived before the house was
+  empty never counts: the house goes away, without preheating first.
 - **Manual hold**: a setpoint changed by hand (the thermostat's own buttons, or
   the Home Assistant UI) is kept until the next slot starts, today or on the
   following days. The house going
