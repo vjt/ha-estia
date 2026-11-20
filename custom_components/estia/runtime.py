@@ -53,6 +53,7 @@ from .const import (
     HVAC_ON_SETTLE_SECONDS,
     Direction,
     Field,
+    Mode,
     Weekday,
 )
 from .const import Event as EstiaEvent
@@ -182,6 +183,22 @@ class EstiaRuntime:
 
     # -- reading -----------------------------------------------------------
 
+    def _empty_since(self, presence: State | None) -> datetime | None:
+        """Since when the house is empty: None when the presence sensor is not off.
+
+        That is the sensor's last change, except after a restart: a template
+        sensor comes back with a new last change, and a house already empty
+        would count as occupied for another away delay, go home, then go
+        away again and announce it. A last decided mode of away or preheat
+        says the house was already empty for at least the delay.
+        """
+        if presence is None or presence.state != STATE_OFF:
+            return None
+        if self.state.mode in (Mode.AWAY, Mode.PREHEAT):
+            away_delay = timedelta(minutes=self.state.away_delay_min)
+            return min(presence.last_changed, dt_util.now() - away_delay)
+        return presence.last_changed
+
     def _snapshot(self) -> Snapshot:
         climate = self._hass.states.get(self.wiring.climate)
         presence = self._hass.states.get(self.wiring.presence)
@@ -194,11 +211,7 @@ class EstiaRuntime:
             away_delay=timedelta(minutes=self.state.away_delay_min),
             preheat_enabled=self.state.preheat_enabled,
             preheat_radius_km=self.state.preheat_radius_km,
-            empty_since=(
-                presence.last_changed
-                if presence is not None and presence.state == STATE_OFF
-                else None
-            ),
+            empty_since=self._empty_since(presence),
             travellers=tuple(_parse_traveller(self._hass, pair) for pair in self.wiring.proximity),
             hold_until=self.state.hold_until,
             boost_until=self.state.boost.until if self.state.boost is not None else None,
