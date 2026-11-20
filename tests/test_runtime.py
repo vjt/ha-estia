@@ -563,6 +563,32 @@ async def test_mode_survives_restart_without_event(
     assert events == []
 
 
+async def test_away_survives_restart_without_going_home(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    thermostat: FakeThermostat,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    hass.states.async_set(PRESENCE, STATE_OFF)
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN))
+    assert mode(hass, entry) == Mode.AWAY
+    events = async_capture_events(hass, EstiaEvent.MODE_CHANGED)
+
+    # A restart: the presence template comes back off, with a new last change.
+    await advance(hass, freezer, timedelta(hours=5))
+    hass.states.async_remove(PRESENCE)
+    hass.states.async_set(PRESENCE, STATE_OFF)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert mode(hass, entry) == Mode.AWAY
+    assert thermostat.setpoint == INITIAL_AWAY_SETPOINT
+
+    # Nor home and away again once the new last change is a delay old.
+    await advance(hass, freezer, timedelta(minutes=INITIAL_AWAY_DELAY_MIN))
+    assert mode(hass, entry) == Mode.AWAY
+    assert events == []
+
+
 async def test_unload(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
