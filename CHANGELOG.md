@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.3 — 2026-11-20
+
+### Fixed
+
+- **A restart announced "nobody home" with nobody home.** After a Home
+  Assistant restart the presence sensor comes back off with a new last
+  change, and Estia counted the house as empty only from then: a house empty
+  for hours went back to the schedule for another away delay, then away again,
+  and the mode change fired the away notification. Away or preheat now
+  survives a restart: the last decided mode says the house was already empty.
+
 ## 0.4.2 — 2026-11-11
 
 ### Fixed

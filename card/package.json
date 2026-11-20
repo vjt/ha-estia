@@ -1,6 +1,6 @@
 {
   "name": "estia-card",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "description": "Lovelace card for the Estia heating schedule",
   "license": "MIT",
