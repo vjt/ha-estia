@@ -81,7 +81,11 @@ as "Vesta"; renamed because `portbusy/ha-vesta` already owns the
   `last_changed` (vjt 2026-11-11): proximity keeps a resident at home at 0 /
   `arrived` forever, so a presence sensor off with someone home (only rooms
   heated otherwise occupied) went preheat instead of away. Unknown instant →
-  does not count; `next_wakeup` includes the window's end.
+  does not count; `next_wakeup` includes the window's end. And only if the
+  house was already empty at that instant (`_is_empty(direction_since)`): an
+  HA restart resets both `last_changed`, so a resident at home read as
+  arrived 12 s after the presence sensor went off, and home turned into
+  preheat for 12 s instead of away (0.4.3).
 - Manual hold: a setpoint change whose context has no `parent_id`,
   schedule on → hold until the next slot start strictly after now
   (the first start of the following days, each with its profile; now + 1
